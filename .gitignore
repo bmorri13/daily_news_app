@@ -1,5 +1,28 @@
+# Environment files with secrets
+.env
+*.env.local
+
+# Database
+data/
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+
+# Node.js
+node_modules/
+.next/
+*.log
+
 # Auto Claude data directory
-.auto-claude/
+.claude/*
+CLAUDE.md
 
 # Auto Claude generated files
 .auto-claude-security.json
