@@ -1,0 +1,56 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Connect Tailscale
+      uses: tailscale/github-action@v2
+      with:
+        oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+        oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+        tags: tag:git-ci
+
+    - name: Deploy to server
+      env:
+        SSH_USER: ${{ secrets.SSH_USER }}
+        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        CF_TOKEN: ${{ secrets.CF_TOKEN }}
+      run: |
+        APP_DIR="/opt/bmosan-news"
+
+        # Write .env file first (GitHub masks these secrets in logs)
+        ssh -o "StrictHostKeyChecking=no" "${SSH_USER}@docker-compose-03" "cat > ${APP_DIR}/.env << 'ENVEOF'
+        POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+        ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+        CF_TOKEN=${CF_TOKEN}
+        ARTICLES_PER_CATEGORY=5
+        FETCH_SCHEDULE_HOURS=24
+        ENVEOF
+        chmod 600 ${APP_DIR}/.env"
+
+        # Update repository and deploy
+        ssh -o "StrictHostKeyChecking=no" "${SSH_USER}@docker-compose-03" << ENDSSH
+          set -e
+          cd ${APP_DIR}
+
+          # Pull latest code
+          git fetch origin
+          git reset --hard origin/master
+
+          # Deploy with docker compose
+          docker compose pull
+          docker compose up -d --build
+
+          echo "Deployment complete"
+        ENDSSH
