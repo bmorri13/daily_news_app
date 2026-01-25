@@ -18,9 +18,10 @@ import { Stats, getCategoryColor, getCategoryLabel } from '@/lib/api';
 interface StatsPanelProps {
   stats: Stats | null;
   loading?: boolean;
+  onCategoryClick?: (category: string) => void;
 }
 
-export default function StatsPanel({ stats, loading }: StatsPanelProps) {
+export default function StatsPanel({ stats, loading, onCategoryClick }: StatsPanelProps) {
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
 
   if (loading) {
@@ -177,6 +178,7 @@ export default function StatsPanel({ stats, loading }: StatsPanelProps) {
                 `}
                 onMouseEnter={() => setHoveredCategory(category)}
                 onMouseLeave={() => setHoveredCategory(null)}
+                onClick={() => onCategoryClick?.(category)}
               >
                 <div className="relative flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
