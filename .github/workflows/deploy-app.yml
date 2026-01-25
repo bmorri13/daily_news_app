@@ -20,26 +20,13 @@ jobs:
         oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
         tags: tag:git-ci
 
-    - name: Write .env file
-      env:
-        SSH_USER: ${{ secrets.SSH_USER }}
-        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        CF_TOKEN: ${{ secrets.CF_TOKEN }}
-      run: |
-        ssh -o StrictHostKeyChecking=no "${SSH_USER}@docker-compose-03" \
-          "printf '%s\n' \
-            'POSTGRES_PASSWORD=${POSTGRES_PASSWORD}' \
-            'ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}' \
-            'CF_TOKEN=${CF_TOKEN}' \
-            'ARTICLES_PER_CATEGORY=5' \
-            'FETCH_SCHEDULE_HOURS=24' \
-            > /opt/bmosan-news/.env && chmod 600 /opt/bmosan-news/.env"
-
     - name: Deploy application
       env:
         SSH_USER: ${{ secrets.SSH_USER }}
         REPO: ${{ github.repository }}
+        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        CF_TOKEN: ${{ secrets.CF_TOKEN }}
       run: |
         ssh -o StrictHostKeyChecking=no "${SSH_USER}@docker-compose-03" "
           set -e
@@ -48,8 +35,7 @@ jobs:
           # Clone if not a git repo, otherwise update
           if [ ! -d \"\${APP_DIR}/.git\" ]; then
             echo 'Initializing git repository...'
-            rm -rf \${APP_DIR}/*
-            rm -rf \${APP_DIR}/.[!.]* 2>/dev/null || true
+            rm -rf \${APP_DIR}
             git clone https://github.com/${REPO}.git \${APP_DIR}
           else
             echo 'Updating existing repository...'
@@ -57,6 +43,16 @@ jobs:
             git fetch origin
             git reset --hard origin/master
           fi
+
+          # Write .env file AFTER clone/update
+          printf '%s\n' \
+            'POSTGRES_PASSWORD=${POSTGRES_PASSWORD}' \
+            'ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}' \
+            'CF_TOKEN=${CF_TOKEN}' \
+            'ARTICLES_PER_CATEGORY=5' \
+            'FETCH_SCHEDULE_HOURS=24' \
+            > \${APP_DIR}/.env
+          chmod 600 \${APP_DIR}/.env
 
           cd \${APP_DIR}
           docker compose pull
