@@ -39,11 +39,27 @@ jobs:
     - name: Deploy application
       env:
         SSH_USER: ${{ secrets.SSH_USER }}
+        REPO: ${{ github.repository }}
       run: |
-        ssh -o StrictHostKeyChecking=no "${SSH_USER}@docker-compose-03" \
-          "cd /opt/bmosan-news && \
-           git fetch origin && \
-           git reset --hard origin/master && \
-           docker compose pull && \
-           docker compose up -d --build && \
-           echo 'Deployment complete'"
+        ssh -o StrictHostKeyChecking=no "${SSH_USER}@docker-compose-03" "
+          set -e
+          APP_DIR=/opt/bmosan-news
+
+          # Clone if not a git repo, otherwise update
+          if [ ! -d \"\${APP_DIR}/.git\" ]; then
+            echo 'Initializing git repository...'
+            rm -rf \${APP_DIR}/*
+            rm -rf \${APP_DIR}/.[!.]* 2>/dev/null || true
+            git clone https://github.com/${REPO}.git \${APP_DIR}
+          else
+            echo 'Updating existing repository...'
+            cd \${APP_DIR}
+            git fetch origin
+            git reset --hard origin/master
+          fi
+
+          cd \${APP_DIR}
+          docker compose pull
+          docker compose up -d --build
+          echo 'Deployment complete'
+        "
