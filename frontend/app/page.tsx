@@ -267,7 +267,6 @@ export default function Home() {
                           articles={articles}
                           sectionIndex={index}
                           onArticleClick={handleArticleClick}
-                          onViewArchive={handleFilterClick}
                         />
                       );
                     })}

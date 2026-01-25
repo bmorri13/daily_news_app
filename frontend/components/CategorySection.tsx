@@ -1,6 +1,6 @@
 'use client';
 
-import { Shield, Brain, Cloud, Bitcoin, ArrowRight } from 'lucide-react';
+import { Shield, Brain, Cloud, Bitcoin } from 'lucide-react';
 import { Article, getCategoryColor, getCategoryLabel } from '@/lib/api';
 import ArticleCard from './ArticleCard';
 
@@ -9,7 +9,6 @@ interface CategorySectionProps {
   articles: Article[];
   sectionIndex?: number;
   onArticleClick?: (article: Article) => void;
-  onViewArchive?: (category: string) => void;
 }
 
 const categoryIcons: { [key: string]: React.ReactNode } = {
@@ -26,7 +25,7 @@ const categoryDescriptions: { [key: string]: string } = {
   crypto: 'Blockchain developments and market movements',
 };
 
-export default function CategorySection({ category, articles, sectionIndex = 0, onArticleClick, onViewArchive }: CategorySectionProps) {
+export default function CategorySection({ category, articles, sectionIndex = 0, onArticleClick }: CategorySectionProps) {
   const color = getCategoryColor(category);
   const label = getCategoryLabel(category);
   const icon = categoryIcons[category];
@@ -64,28 +63,16 @@ export default function CategorySection({ category, articles, sectionIndex = 0, 
         </div>
 
         {/* Title row */}
-        <div className="flex items-end justify-between gap-6">
-          <div>
-            <h2
-              className="font-display text-2xl md:text-3xl font-bold mb-1"
-              style={{ color }}
-            >
-              {label}
-            </h2>
-            <p className="text-sm text-[var(--text-muted)] max-w-md">
-              {description}
-            </p>
-          </div>
-
-          <button
-            onClick={() => onViewArchive?.(category)}
-            className="hidden md:flex items-center gap-2 px-4 py-2 border border-[var(--border-subtle)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] transition-all rounded-md group"
+        <div>
+          <h2
+            className="font-display text-2xl md:text-3xl font-bold mb-1"
+            style={{ color }}
           >
-            <span className="font-display text-sm text-[var(--text-secondary)] group-hover:text-[var(--accent-primary)] transition-colors">
-              View Archive
-            </span>
-            <ArrowRight size={14} className="text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] transition-colors" />
-          </button>
+            {label}
+          </h2>
+          <p className="text-sm text-[var(--text-muted)] max-w-md">
+            {description}
+          </p>
         </div>
       </div>
 
