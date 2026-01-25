@@ -59,6 +59,17 @@ export interface Newsletter {
   processed: boolean;
 }
 
+export interface Source {
+  id: number;
+  name: string;
+  url: string;
+  feed_url: string;
+  category: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
 // API Base URL - uses Next.js rewrite in production
 const API_BASE = typeof window !== 'undefined' 
   ? '' // Use relative URL in browser (goes through Next.js rewrite)
@@ -156,6 +167,10 @@ export async function triggerNewsletterFetch(): Promise<{
   status: string;
 }> {
   return fetchApi('/api/newsletter/trigger', { method: 'POST' });
+}
+
+export async function getSources(): Promise<Source[]> {
+  return fetchApi<Source[]>('/api/sources');
 }
 
 // Utility functions - Updated color palette

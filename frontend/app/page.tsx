@@ -288,7 +288,7 @@ export default function Home() {
                 {statsLoading ? (
                   <StatsPanelSkeleton />
                 ) : (
-                  <StatsPanel stats={stats} onCategoryClick={handleFilterClick} />
+                  <StatsPanel stats={stats} />
                 )}
               </div>
             </aside>

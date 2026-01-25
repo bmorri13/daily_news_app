@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Zap,
   FileText,
@@ -10,19 +10,55 @@ import {
   XCircle,
   Loader2,
   ChevronRight,
-  BarChart3
+  ChevronDown,
+  BarChart3,
+  ExternalLink
 } from 'lucide-react';
 import { formatDistanceToNow, addHours, isFuture } from 'date-fns';
-import { Stats, getCategoryColor, getCategoryLabel } from '@/lib/api';
+import { Stats, Source, getCategoryColor, getCategoryLabel, getSources } from '@/lib/api';
 
 interface StatsPanelProps {
   stats: Stats | null;
   loading?: boolean;
-  onCategoryClick?: (category: string) => void;
 }
 
-export default function StatsPanel({ stats, loading, onCategoryClick }: StatsPanelProps) {
+export default function StatsPanel({ stats, loading }: StatsPanelProps) {
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [sources, setSources] = useState<Source[]>([]);
+  const [sourcesLoading, setSourcesLoading] = useState(false);
+
+  // Fetch sources on mount
+  useEffect(() => {
+    const fetchSources = async () => {
+      setSourcesLoading(true);
+      try {
+        const data = await getSources();
+        setSources(data);
+      } catch (err) {
+        console.error('Failed to fetch sources:', err);
+      } finally {
+        setSourcesLoading(false);
+      }
+    };
+    fetchSources();
+  }, []);
+
+  const toggleCategory = (category: string) => {
+    setExpandedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  };
+
+  const getSourcesForCategory = (category: string): Source[] => {
+    return sources.filter(s => s.category === category && s.active);
+  };
 
   if (loading) {
     return (
@@ -63,7 +99,6 @@ export default function StatsPanel({ stats, loading, onCategoryClick }: StatsPan
     : null;
 
   const totalArticles = stats.total_articles;
-  const maxCategoryCount = Math.max(...Object.values(stats.articles_by_category));
 
   return (
     <div className="relative">
@@ -167,57 +202,115 @@ export default function StatsPanel({ stats, loading, onCategoryClick }: StatsPan
             const percentage = totalArticles > 0 ? Math.round((count / totalArticles) * 100) : 0;
             const color = getCategoryColor(category);
             const isHovered = hoveredCategory === category;
+            const isExpanded = expandedCategories.has(category);
+            const categorySources = getSourcesForCategory(category);
 
             return (
-              <div
-                key={category}
-                className={`
-                  relative px-5 py-3 cursor-pointer transition-all duration-200
-                  ${index !== stats.categories.length - 1 ? 'border-b border-[var(--border-subtle)]' : ''}
-                  hover:bg-[var(--surface-hover)]
-                `}
-                onMouseEnter={() => setHoveredCategory(category)}
-                onMouseLeave={() => setHoveredCategory(null)}
-                onClick={() => onCategoryClick?.(category)}
-              >
-                <div className="relative flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className="w-2 h-2 rounded-full transition-all duration-200"
-                      style={{
-                        backgroundColor: color,
-                        boxShadow: isHovered ? `0 0 8px ${color}` : 'none',
-                      }}
-                    />
-                    <span
-                      className="text-sm transition-colors duration-200"
-                      style={{ color: isHovered ? color : 'var(--text-secondary)' }}
-                    >
-                      {getCategoryLabel(category)}
-                    </span>
-                  </div>
+              <div key={category}>
+                <div
+                  className={`
+                    relative px-5 py-3 cursor-pointer transition-all duration-200
+                    ${!isExpanded && index !== stats.categories.length - 1 ? 'border-b border-[var(--border-subtle)]' : ''}
+                    hover:bg-[var(--surface-hover)]
+                  `}
+                  onMouseEnter={() => setHoveredCategory(category)}
+                  onMouseLeave={() => setHoveredCategory(null)}
+                  onClick={() => toggleCategory(category)}
+                >
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="w-2 h-2 rounded-full transition-all duration-200"
+                        style={{
+                          backgroundColor: color,
+                          boxShadow: isHovered ? `0 0 8px ${color}` : 'none',
+                        }}
+                      />
+                      <span
+                        className="text-sm transition-colors duration-200"
+                        style={{ color: isHovered || isExpanded ? color : 'var(--text-secondary)' }}
+                      >
+                        {getCategoryLabel(category)}
+                      </span>
+                    </div>
 
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="font-display text-sm font-medium tabular-nums"
-                      style={{ color: isHovered ? color : 'var(--text-primary)' }}
-                    >
-                      {count}
-                    </span>
-                    <span className="text-xs text-[var(--text-muted)] w-8 text-right">
-                      {percentage}%
-                    </span>
-                    <ChevronRight
-                      size={14}
-                      className="transition-all duration-200"
-                      style={{
-                        color: isHovered ? color : 'var(--text-muted)',
-                        transform: isHovered ? 'translateX(2px)' : 'translateX(0)',
-                        opacity: isHovered ? 1 : 0.5,
-                      }}
-                    />
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="font-display text-sm font-medium tabular-nums"
+                        style={{ color: isHovered || isExpanded ? color : 'var(--text-primary)' }}
+                      >
+                        {count}
+                      </span>
+                      <span className="text-xs text-[var(--text-muted)] w-8 text-right">
+                        {percentage}%
+                      </span>
+                      {isExpanded ? (
+                        <ChevronDown
+                          size={14}
+                          className="transition-all duration-200"
+                          style={{ color: color }}
+                        />
+                      ) : (
+                        <ChevronRight
+                          size={14}
+                          className="transition-all duration-200"
+                          style={{
+                            color: isHovered ? color : 'var(--text-muted)',
+                            opacity: isHovered ? 1 : 0.5,
+                          }}
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
+
+                {/* Expanded Sources List */}
+                {isExpanded && (
+                  <div
+                    className={`
+                      bg-[var(--bg-primary)] px-5 py-3
+                      ${index !== stats.categories.length - 1 ? 'border-b border-[var(--border-subtle)]' : ''}
+                    `}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Rss size={10} className="text-[var(--text-muted)]" />
+                      <span className="text-xs text-[var(--text-muted)]">
+                        {categorySources.length} RSS {categorySources.length === 1 ? 'Feed' : 'Feeds'}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {sourcesLoading ? (
+                        <div className="flex items-center gap-2 py-2">
+                          <Loader2 size={12} className="animate-spin text-[var(--text-muted)]" />
+                          <span className="text-xs text-[var(--text-muted)]">Loading sources...</span>
+                        </div>
+                      ) : categorySources.length > 0 ? (
+                        categorySources.map(source => (
+                          <a
+                            key={source.id}
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between gap-2 py-1.5 px-2 rounded hover:bg-[var(--surface-hover)] transition-colors group"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <span
+                              className="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors truncate"
+                            >
+                              {source.name}
+                            </span>
+                            <ExternalLink
+                              size={10}
+                              className="text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] transition-colors flex-shrink-0"
+                            />
+                          </a>
+                        ))
+                      ) : (
+                        <span className="text-xs text-[var(--text-muted)]">No sources available</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
