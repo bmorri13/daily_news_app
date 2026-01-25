@@ -300,15 +300,33 @@ export default function TldrNewsletter() {
         </div>
       )}
 
-      {/* Newsletter Styles */}
+      {/* Newsletter Styles - Force dark theme on embedded content */}
       <style jsx global>{`
         .newsletter-content {
-          color: var(--text-secondary);
+          color: var(--text-secondary) !important;
           line-height: 1.7;
         }
 
+        /* Force dark background on all elements */
+        .newsletter-content,
+        .newsletter-content *,
+        .newsletter-content div,
+        .newsletter-content section,
+        .newsletter-content article,
+        .newsletter-content main,
+        .newsletter-content header,
+        .newsletter-content footer,
+        .newsletter-content nav,
+        .newsletter-content aside,
+        .newsletter-content span,
+        .newsletter-content body {
+          background-color: transparent !important;
+          background: transparent !important;
+          color: var(--text-secondary) !important;
+        }
+
         .newsletter-content a {
-          color: var(--accent-primary);
+          color: var(--accent-primary) !important;
           text-decoration: underline;
           text-underline-offset: 2px;
         }
@@ -323,7 +341,7 @@ export default function TldrNewsletter() {
         .newsletter-content h4,
         .newsletter-content h5,
         .newsletter-content h6 {
-          color: var(--text-primary);
+          color: var(--text-primary) !important;
           font-family: var(--font-display);
           margin-top: 1.5em;
           margin-bottom: 0.5em;
@@ -335,6 +353,9 @@ export default function TldrNewsletter() {
 
         .newsletter-content h2 {
           font-size: 1.25rem;
+          padding-top: 1em;
+          border-top: 1px solid var(--border-subtle);
+          margin-top: 2em;
         }
 
         .newsletter-content h3 {
@@ -343,6 +364,7 @@ export default function TldrNewsletter() {
 
         .newsletter-content p {
           margin-bottom: 1em;
+          color: var(--text-secondary) !important;
         }
 
         .newsletter-content ul,
@@ -353,6 +375,13 @@ export default function TldrNewsletter() {
 
         .newsletter-content li {
           margin-bottom: 0.5em;
+          color: var(--text-secondary) !important;
+        }
+
+        .newsletter-content strong,
+        .newsletter-content b {
+          color: var(--text-primary) !important;
+          font-weight: 600;
         }
 
         .newsletter-content img {
@@ -366,32 +395,33 @@ export default function TldrNewsletter() {
           border-left: 3px solid var(--accent-primary);
           padding-left: 1em;
           margin-left: 0;
-          color: var(--text-muted);
+          color: var(--text-muted) !important;
           font-style: italic;
         }
 
         .newsletter-content code {
-          background: var(--bg-tertiary);
+          background: var(--bg-tertiary) !important;
           padding: 0.2em 0.4em;
           border-radius: 4px;
           font-size: 0.9em;
+          color: var(--accent-primary) !important;
         }
 
         .newsletter-content pre {
-          background: var(--bg-tertiary);
+          background: var(--bg-tertiary) !important;
           padding: 1em;
           border-radius: 8px;
           overflow-x: auto;
         }
 
         .newsletter-content pre code {
-          background: none;
+          background: none !important;
           padding: 0;
         }
 
         .newsletter-content hr {
-          border: none;
-          border-top: 1px solid var(--border-subtle);
+          border: none !important;
+          border-top: 1px solid var(--border-subtle) !important;
           margin: 2em 0;
         }
 
@@ -403,13 +433,33 @@ export default function TldrNewsletter() {
 
         .newsletter-content th,
         .newsletter-content td {
-          border: 1px solid var(--border-subtle);
+          border: 1px solid var(--border-subtle) !important;
           padding: 0.5em;
           text-align: left;
+          background: transparent !important;
         }
 
         .newsletter-content th {
-          background: var(--bg-tertiary);
+          background: var(--bg-tertiary) !important;
+          color: var(--text-primary) !important;
+        }
+
+        /* Hide social sharing buttons and navigation from embedded content */
+        .newsletter-content nav,
+        .newsletter-content [class*="share"],
+        .newsletter-content [class*="social"],
+        .newsletter-content button:not([type="submit"]) {
+          display: none !important;
+        }
+
+        /* Style embedded sponsor sections */
+        .newsletter-content [class*="sponsor"],
+        .newsletter-content [class*="Sponsor"] {
+          background: var(--bg-tertiary) !important;
+          border: 1px solid var(--border-subtle) !important;
+          border-radius: 8px;
+          padding: 1em;
+          margin: 1.5em 0;
         }
       `}</style>
     </div>
