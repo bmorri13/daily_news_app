@@ -13,9 +13,9 @@ BEGIN
 END;
 $$;
 
--- Schedule daily at 6:00 AM UTC
+-- Schedule daily at 12:00 UTC (7:00 AM EST / 8:00 AM EDT)
 SELECT cron.schedule(
     'daily-news-fetch',
-    '0 6 * * *',
+    '0 12 * * *',
     'SELECT trigger_daily_fetch()'
 );
