@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func
@@ -114,37 +114,41 @@ Respond in JSON format only, no other text:
         return processed_count
     
     def select_top_articles_for_today(
-        self, 
+        self,
         articles_per_category: int = 5
     ) -> dict[str, list[Article]]:
         """
         Select the top articles for today based on relevance score.
         Features them by setting featured_date.
+        Only considers articles published within the last 24 hours.
         """
         today = date.today()
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=24)
         selected = {}
-        
+
         for category in settings.categories:
-            # Get unprocessed articles in this category that haven't been featured
+            # Get processed articles in this category that haven't been featured
+            # and were published within the last 24 hours
             articles = self.db.query(Article).filter(
                 and_(
                     Article.category == category,
                     Article.processed == True,
-                    Article.featured_date == None
+                    Article.featured_date == None,
+                    Article.published_at >= cutoff_time
                 )
             ).order_by(
                 Article.relevance_score.desc(),
                 Article.published_at.desc()
             ).limit(articles_per_category).all()
-            
+
             # Mark as featured today
             for article in articles:
                 article.featured_date = today
-            
+
             selected[category] = articles
-        
+
         self.db.commit()
-        
+
         return selected
     
     def get_daily_digest(self, target_date: Optional[date] = None) -> dict:
