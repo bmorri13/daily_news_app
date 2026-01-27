@@ -14,7 +14,7 @@ import { format, isToday } from 'date-fns';
 export type TabType = 'digest' | 'newsletter';
 
 interface HeaderProps {
-  selectedDate: Date;
+  selectedDate: Date | null;
   availableDates: string[];
   onDateChange: (date: Date) => void;
   currentTab: TabType;
@@ -45,7 +45,7 @@ export default function Header({
     setShowDatePicker(false);
   };
 
-  const isViewingToday = isToday(selectedDate);
+  const isViewingToday = selectedDate ? isToday(selectedDate) : true;
 
   return (
     <header className="glass-header sticky top-0 z-50">
@@ -151,7 +151,7 @@ export default function Header({
                   >
                     <Calendar size={14} className={`transition-colors ${!isViewingToday ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)] group-hover:text-[var(--accent-primary)]'}`} />
                     <span className={`font-display text-sm font-medium ${!isViewingToday ? 'text-[var(--accent-primary)]' : 'text-[var(--text-primary)]'}`}>
-                      {isViewingToday ? 'Today' : format(selectedDate, 'MMM d, yyyy')}
+                      {isViewingToday ? 'Today' : (selectedDate ? format(selectedDate, 'MMM d, yyyy') : '')}
                     </span>
                     <ChevronDown
                       size={14}
@@ -200,7 +200,7 @@ export default function Header({
                       {availableDates.length > 0 ? (
                         availableDates.map((dateStr, index) => {
                           const date = new Date(dateStr);
-                          const isSelected = format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
+                          const isSelected = selectedDate && format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
                           const dateIsToday = isToday(date);
 
                           // Skip today in archive list since it's shown above

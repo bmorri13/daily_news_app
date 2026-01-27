@@ -31,7 +31,8 @@ const categoryConfig: { [key: string]: { label: string; color: string; icon: Rea
 
 export default function Home() {
   const [currentTab, setCurrentTab] = useState<TabType>('digest');
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [digest, setDigest] = useState<DailyDigest | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -52,19 +53,26 @@ export default function Home() {
     setSelectedArticle(null);
   };
 
-  const fetchData = useCallback(async (date: Date) => {
+  const fetchData = useCallback(async (date: Date | null) => {
     setLoading(true);
     setError(null);
 
     try {
-      const dateStr = format(date, 'yyyy-MM-dd');
-      const [digestData, datesData] = await Promise.all([
-        getDailyDigest(dateStr),
-        getAvailableDates(),
-      ]);
+      // First fetch available dates to get the most recent
+      const datesData = await getAvailableDates();
+      setAvailableDates(datesData.dates);
+
+      // Use provided date, or default to most recent available date
+      let targetDate = date;
+      if (!targetDate && datesData.dates.length > 0) {
+        targetDate = new Date(datesData.dates[0] + 'T00:00:00');
+        setSelectedDate(targetDate);
+      }
+
+      const dateStr = targetDate ? format(targetDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+      const digestData = await getDailyDigest(dateStr);
 
       setDigest(digestData);
-      setAvailableDates(datesData.dates);
     } catch (err) {
       console.error('Failed to fetch digest:', err);
       setError('Failed to load news digest. Make sure the backend is running.');
@@ -86,9 +94,16 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetchData(selectedDate);
-    fetchStats();
-  }, [selectedDate, fetchData, fetchStats]);
+    if (initialLoad) {
+      // On initial load, fetch without a date to get the most recent
+      fetchData(null);
+      fetchStats();
+      setInitialLoad(false);
+    } else if (selectedDate) {
+      // After initial load, fetch data for the selected date
+      fetchData(selectedDate);
+    }
+  }, [selectedDate, initialLoad, fetchData, fetchStats]);
 
   const handleDateChange = (date: Date) => {
     setSelectedDate(date);
@@ -238,14 +253,14 @@ export default function Home() {
                             Daily Digest
                           </p>
                           <h2 className="font-display text-3xl md:text-4xl font-bold text-[var(--text-primary)]">
-                            {format(selectedDate, 'EEEE')}
+                            {selectedDate ? format(selectedDate, 'EEEE') : ''}
                           </h2>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-4 ml-5">
                         <span className="font-display text-base text-[var(--text-secondary)]">
-                          {format(selectedDate, 'MMMM d, yyyy')}
+                          {selectedDate ? format(selectedDate, 'MMMM d, yyyy') : ''}
                         </span>
                         <div className="h-px flex-1 bg-[var(--border-subtle)]" />
                         <span className="font-display text-sm text-[var(--text-muted)]">
