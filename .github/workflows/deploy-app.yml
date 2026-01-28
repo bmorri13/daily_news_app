@@ -57,7 +57,7 @@ jobs:
           chmod 600 \${APP_DIR}/.env
 
           cd \${APP_DIR}
-          docker compose pull
-          docker compose up -d --build
+          docker compose -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.prod.yml up -d --build
           echo 'Deployment complete'
         "
