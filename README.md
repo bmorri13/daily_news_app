@@ -1,10 +1,10 @@
 # 📰 Tech Digest - AI-Powered News Aggregator
 
-A daily news aggregation platform that uses AI (Claude) to fetch, analyze, summarize, and tag articles from RSS feeds across Cyber Security, AI, Cloud Engineering, and Cryptocurrency.
+A daily news aggregation platform that uses AI (Claude) to fetch, analyze, summarize, and tag articles from RSS feeds across Cyber Security, AI, Cloud Engineering, and Cryptocurrency. Features include curated daily digests and AI-summarized cybersecurity newsletters.
 
 ![Tech Stack](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat&logo=next.js&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat&logo=sqlite&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js_16-000000?style=flat&logo=next.js&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
 ![Claude AI](https://img.shields.io/badge/Claude_AI-8B5CF6?style=flat&logo=anthropic&logoColor=white)
 
@@ -13,26 +13,25 @@ A daily news aggregation platform that uses AI (Claude) to fetch, analyze, summa
 - **📡 RSS Feed Aggregation**: Automatically fetches articles from 20+ curated tech news sources
 - **🤖 AI-Powered Analysis**: Uses Claude AI to generate summaries, tags, sentiment analysis, and relevance scores
 - **📊 Daily Digest**: Curates the top 5 articles per category each day
+- **📰 Newsletter Digest**: Fetches and summarizes the tl;dr sec cybersecurity newsletter with AI executive summaries
 - **📅 Historical Archive**: Browse past digests by date
 - **🎨 Modern UI**: Beautiful dark-themed card-based interface
 - **🐳 Dockerized**: Easy deployment with Docker Compose
+- **⏰ Automated Scheduling**: pg_cron-based scheduling for daily fetches
 
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Docker Compose                          │
-├─────────────────┬─────────────────┬─────────────────────────┤
-│    Frontend     │     Backend     │       Scheduler         │
-│   (Next.js)     │    (FastAPI)    │     (APScheduler)       │
-│   Port: 3000    │   Port: 8000    │                         │
-└────────┬────────┴────────┬────────┴────────────┬────────────┘
-         │                 │                      │
-         │                 ▼                      │
-         │         ┌──────────────┐               │
-         └────────►│   SQLite DB  │◄──────────────┘
-                   │  (./data/)   │
-                   └──────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                         Docker Compose                                │
+├──────────────┬──────────────┬──────────────┬────────────────────────┤
+│   Frontend   │   Backend    │  Supabase DB │   Supabase Studio      │
+│  (Next.js)   │  (FastAPI)   │ (PostgreSQL) │    (DB Web UI)         │
+│  Port: 3000  │  Port: 8000  │  Port: 5432  │    Port: 3001          │
+├──────────────┴──────────────┴──────────────┴────────────────────────┤
+│                    Cloudflare Tunnel (Optional)                      │
+│                      External Access to Site                         │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 🚀 Quick Start
@@ -46,7 +45,7 @@ A daily news aggregation platform that uses AI (Claude) to fetch, analyze, summa
 
 1. **Clone and navigate to the project:**
    ```bash
-   cd news-aggregator
+   cd daily_news_app
    ```
 
 2. **Create your environment file:**
@@ -54,9 +53,11 @@ A daily news aggregation platform that uses AI (Claude) to fetch, analyze, summa
    cp .env.example .env
    ```
 
-3. **Add your Anthropic API key to `.env`:**
+3. **Configure your `.env` file:**
    ```env
    ANTHROPIC_API_KEY=your_api_key_here
+   POSTGRES_PASSWORD=your_db_password
+   CF_TOKEN=your_cloudflare_tunnel_token  # Optional, for external access
    ```
 
 4. **Start the services:**
@@ -68,6 +69,7 @@ A daily news aggregation platform that uses AI (Claude) to fetch, analyze, summa
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:8000
    - API Docs: http://localhost:8000/docs
+   - Supabase Studio: http://localhost:3001
 
 ### First Run
 
@@ -79,11 +81,10 @@ On first start, click the "Refresh" button in the UI to trigger an initial fetch
 ## 📁 Project Structure
 
 ```
-news-aggregator/
+daily_news_app/
 ├── docker-compose.yml      # Docker orchestration
 ├── .env.example            # Environment template
 ├── .env                    # Your environment variables
-├── data/                   # SQLite database (persisted)
 │
 ├── backend/                # FastAPI Backend
 │   ├── Dockerfile
@@ -95,25 +96,30 @@ news-aggregator/
 │       ├── database.py     # Database setup
 │       ├── config.py       # Configuration & RSS sources
 │       ├── rss_fetcher.py  # RSS fetching logic
-│       ├── ai_processor.py # Claude AI processing
-│       └── scheduler.py    # APScheduler for daily jobs
+│       └── ai_processor.py # Claude AI processing
 │
-└── frontend/               # Next.js Frontend
-    ├── Dockerfile
-    ├── package.json
-    ├── app/
-    │   ├── layout.tsx
-    │   ├── page.tsx
-    │   └── globals.css
-    ├── components/
-    │   ├── ArticleCard.tsx
-    │   ├── CategorySection.tsx
-    │   ├── Header.tsx
-    │   ├── StatsPanel.tsx
-    │   ├── EmptyState.tsx
-    │   └── LoadingSkeleton.tsx
-    └── lib/
-        └── api.ts          # API client utilities
+├── frontend/               # Next.js Frontend
+│   ├── Dockerfile
+│   ├── package.json
+│   ├── app/
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   └── globals.css
+│   ├── components/
+│   │   ├── ArticleCard.tsx
+│   │   ├── CategorySection.tsx
+│   │   ├── Header.tsx
+│   │   ├── StatsPanel.tsx
+│   │   ├── EmptyState.tsx
+│   │   └── LoadingSkeleton.tsx
+│   └── lib/
+│       └── api.ts          # API client utilities
+│
+└── supabase/               # Database initialization
+    └── init/
+        ├── 00_create_user.sh    # Creates database user
+        ├── 01_extensions.sql    # Enables pg_cron and pg_net
+        └── 02_scheduler.sql     # Sets up daily cron jobs
 ```
 
 ## 🔌 API Endpoints
@@ -130,6 +136,8 @@ news-aggregator/
 | `/api/stats` | GET | Get aggregation statistics |
 | `/api/fetch/trigger` | POST | Manually trigger fetch |
 | `/api/fetch/logs` | GET | Get fetch operation logs |
+| `/api/newsletter/latest` | GET | Get latest tl;dr sec newsletter |
+| `/api/newsletter/trigger` | POST | Fetch and process newsletter |
 
 ## 📡 Configured RSS Sources
 
@@ -165,12 +173,25 @@ news-aggregator/
 
 ### Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ANTHROPIC_API_KEY` | Your Claude API key | Required |
-| `DATABASE_URL` | Database connection string | `sqlite:///./data/news.db` |
-| `ARTICLES_PER_CATEGORY` | Articles to feature per category | `5` |
-| `FETCH_SCHEDULE_HOURS` | Hours between scheduled fetches | `24` |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ANTHROPIC_API_KEY` | Your Claude API key | Yes |
+| `POSTGRES_PASSWORD` | Database password | Yes |
+| `CF_TOKEN` | Cloudflare Tunnel token for external access | No |
+| `ARTICLES_PER_CATEGORY` | Articles to feature per category (default: 5) | No |
+
+### Scheduler (pg_cron)
+
+The application uses PostgreSQL's pg_cron extension for automated scheduling:
+
+- **RSS Feed Fetch**: Runs daily at 12:00 UTC
+- **Newsletter Fetch**: Runs daily at 12:05 UTC
+
+Scheduler configuration is defined in `supabase/init/02_scheduler.sql`. The pg_cron jobs use the pg_net extension to make HTTP POST requests to the backend API endpoints.
+
+To manually trigger fetches:
+- Use the "Refresh" button in the UI
+- Or call the API: `curl -X POST http://localhost:8000/api/fetch/trigger`
 
 ### Adding New RSS Sources
 
@@ -190,34 +211,7 @@ RSS_SOURCES = {
 }
 ```
 
-## 🔄 Migrating to PostgreSQL
-
-When ready to scale, update your `.env`:
-
-```env
-DATABASE_URL=postgresql://user:password@host:5432/news_aggregator
-```
-
-Add PostgreSQL to `docker-compose.yml`:
-
-```yaml
-services:
-  db:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: news_aggregator
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-volumes:
-  postgres_data:
-```
-
-Update backend to depend on db and change the DATABASE_URL.
+Sources are automatically synchronized to the database on backend startup.
 
 ## 🛠️ Development
 
@@ -239,12 +233,11 @@ npm install
 npm run dev
 ```
 
-### Running the Scheduler Manually
+## 🌐 Production
 
-```bash
-cd backend
-python -m app.scheduler
-```
+The application is live at: https://news.bmosan.com/
+
+Deployed via GitHub Actions with automatic builds on push to main.
 
 ## 📝 License
 
@@ -256,4 +249,4 @@ Contributions welcome! Please open an issue or submit a PR.
 
 ---
 
-Built with ❤️ using FastAPI, Next.js, and Claude AI
+Built with FastAPI, Next.js, PostgreSQL, and Claude AI
