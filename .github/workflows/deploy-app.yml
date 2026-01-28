@@ -27,6 +27,7 @@ jobs:
         POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         CF_TOKEN: ${{ secrets.CF_TOKEN }}
+        NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
       run: |
         ssh -o StrictHostKeyChecking=no "${SSH_USER}@docker-compose-03" "
           set -e
@@ -49,6 +50,7 @@ jobs:
             'POSTGRES_PASSWORD=${POSTGRES_PASSWORD}' \
             'ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}' \
             'CF_TOKEN=${CF_TOKEN}' \
+            'NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}' \
             'ARTICLES_PER_CATEGORY=5' \
             'FETCH_SCHEDULE_HOURS=24' \
             > \${APP_DIR}/.env
