@@ -21,9 +21,11 @@ FROM base AS production
 # Build arguments for environment variables needed at build time
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_GA_MEASUREMENT_ID
+ARG API_URL
 
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
+ENV API_URL=$API_URL
 
 # Build the application
 RUN npm run build

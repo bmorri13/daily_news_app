@@ -83,6 +83,7 @@ services:
       args:
         - NEXT_PUBLIC_API_URL=https://news.bmosan.com
         - NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}
+        - API_URL=http://backend:8000
     container_name: news-frontend
     ports:
       - "3000:3000"
