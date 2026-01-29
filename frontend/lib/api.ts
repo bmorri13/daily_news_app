@@ -71,12 +71,8 @@ export interface Source {
   updated_at: string | null;
 }
 
-// API Base URL
-// In browser: use NEXT_PUBLIC_API_URL if set, otherwise use relative URLs (for local dev with rewrites)
-// On server: use API_URL for internal Docker network communication
-const API_BASE = typeof window !== 'undefined'
-  ? (process.env.NEXT_PUBLIC_API_URL || '') // Client-side: use public API URL or relative
-  : (process.env.API_URL || 'http://localhost:8000'); // Server-side: use internal URL
+// API Base URL - always use relative URLs, middleware handles proxying to backend
+const API_BASE = '';
 
 // Fetch wrapper with error handling
 async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
