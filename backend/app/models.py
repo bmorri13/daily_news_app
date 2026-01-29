@@ -44,6 +44,7 @@ class Article(Base):
     
     # AI-generated fields
     summary = Column(Text, nullable=True)
+    key_points = Column(JSON, nullable=True)  # List of 3-5 distinct key points
     ai_tags = Column(JSON, nullable=True)  # List of tags
     sentiment = Column(String(20), nullable=True)  # positive, neutral, negative
     relevance_score = Column(Float, nullable=True)  # 0.0 - 1.0

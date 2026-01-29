@@ -5,6 +5,7 @@ export interface Article {
   url: string;
   category: string;
   summary: string | null;
+  key_points: string[] | null;
   ai_tags: string[] | null;
   sentiment: 'positive' | 'neutral' | 'negative' | null;
   relevance_score: number | null;

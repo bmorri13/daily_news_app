@@ -8,8 +8,7 @@ import {
   TrendingUp,
   Sparkles,
   Target,
-  Lightbulb,
-  ArrowRight
+  Lightbulb
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Article, getCategoryColor } from '@/lib/api';
@@ -52,80 +51,8 @@ export default function ArticleModal({ article, isOpen, onClose }: ArticleModalP
     ? Math.round(article.relevance_score * 100)
     : null;
 
-  // Parse the summary into executive summary with bullet points
-  const generateExecutiveSummary = (summary: string | null, title: string) => {
-    if (!summary) return null;
-
-    // Split summary into sentences (keeping sentences intact)
-    const sentences = summary
-      .split(/(?<=[.!?])\s+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 15);
-
-    // Generate bullet points - each sentence becomes a key point
-    const bulletPoints: string[] = [];
-
-    sentences.forEach((sentence) => {
-      if (bulletPoints.length >= 5) return;
-
-      // Clean up the sentence
-      let point = sentence.trim();
-
-      // Remove trailing period for cleaner bullet points
-      if (point.endsWith('.')) {
-        point = point.slice(0, -1);
-      }
-
-      // Only add substantial points
-      if (point.length > 20) {
-        bulletPoints.push(point);
-      }
-    });
-
-    // If we have fewer than 3 points, try to extract more from longer sentences
-    if (bulletPoints.length < 3 && bulletPoints.length > 0) {
-      const expandedPoints: string[] = [];
-
-      bulletPoints.forEach(point => {
-        // Look for natural breaking points like semicolons or "and" with independent clauses
-        const semicolonSplit = point.split(/;\s*/);
-        if (semicolonSplit.length > 1 && semicolonSplit.every(p => p.length > 25)) {
-          semicolonSplit.forEach(p => {
-            if (expandedPoints.length < 5) {
-              expandedPoints.push(p.trim());
-            }
-          });
-        } else {
-          expandedPoints.push(point);
-        }
-      });
-
-      // If still not enough, try splitting on " - " or long comma phrases
-      if (expandedPoints.length < 3) {
-        const finalPoints: string[] = [];
-        expandedPoints.forEach(point => {
-          const dashSplit = point.split(/\s+[-–—]\s+/);
-          if (dashSplit.length > 1 && dashSplit.every(p => p.length > 20)) {
-            dashSplit.forEach(p => {
-              if (finalPoints.length < 5) finalPoints.push(p.trim());
-            });
-          } else {
-            finalPoints.push(point);
-          }
-        });
-        return { summary, bulletPoints: finalPoints.slice(0, 5) };
-      }
-
-      return { summary, bulletPoints: expandedPoints.slice(0, 5) };
-    }
-
-    return {
-      summary: summary,
-      bulletPoints: bulletPoints.slice(0, 5)
-    };
-  };
-
-  const executiveSummary = generateExecutiveSummary(article.summary, article.title);
+  // Use key_points from API (distinct from summary)
+  const keyPoints = article.key_points || [];
 
   const getSentimentInfo = (sentiment: string | null) => {
     switch (sentiment) {
@@ -214,7 +141,7 @@ export default function ArticleModal({ article, isOpen, onClose }: ArticleModalP
               </span>
             </div>
 
-            {executiveSummary ? (
+            {article.summary ? (
               <div className="space-y-5">
                 {/* Summary Overview */}
                 <div className="bg-[var(--bg-primary)] border-l-2 p-4" style={{ borderColor: categoryColor }}>
@@ -225,12 +152,12 @@ export default function ArticleModal({ article, isOpen, onClose }: ArticleModalP
                     </span>
                   </div>
                   <p className="text-[var(--text-primary)] leading-relaxed">
-                    {executiveSummary.summary}
+                    {article.summary}
                   </p>
                 </div>
 
                 {/* Key Points */}
-                {executiveSummary.bulletPoints.length > 0 && (
+                {keyPoints.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <Lightbulb size={14} style={{ color: categoryColor }} />
@@ -239,7 +166,7 @@ export default function ArticleModal({ article, isOpen, onClose }: ArticleModalP
                       </span>
                     </div>
                     <ul className="space-y-3">
-                      {executiveSummary.bulletPoints.map((point, idx) => (
+                      {keyPoints.map((point, idx) => (
                         <li key={idx} className="flex items-start gap-3">
                           <span
                             className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-[10px] font-display font-bold mt-0.5"

@@ -34,10 +34,11 @@ class AIProcessor:
             content = content[:8000] + "..."
         
         prompt = f"""Analyze this {article.category} news article and provide:
-1. A concise 2-3 sentence summary
-2. 3-5 relevant tags (lowercase, single words or short phrases)
-3. Sentiment analysis (positive, neutral, or negative)
-4. Relevance score from 0.0 to 1.0 (how relevant/important is this article for professionals in {article.category})
+1. A concise 2-3 sentence executive summary (high-level overview)
+2. 3-5 distinct key points (specific details, facts, or insights NOT covered in the summary)
+3. 3-5 relevant tags (lowercase, single words or short phrases)
+4. Sentiment analysis (positive, neutral, or negative)
+5. Relevance score from 0.0 to 1.0 (how relevant/important is this article for professionals in {article.category})
 
 Article Title: {article.title}
 
@@ -46,7 +47,8 @@ Article Content:
 
 Respond in JSON format only, no other text:
 {{
-    "summary": "...",
+    "summary": "2-3 sentence executive overview...",
+    "key_points": ["specific detail 1", "specific detail 2", "specific detail 3"],
     "tags": ["tag1", "tag2", "tag3"],
     "sentiment": "positive|neutral|negative",
     "relevance_score": 0.0-1.0
@@ -68,14 +70,16 @@ Respond in JSON format only, no other text:
             json_match = re.search(r'\{[\s\S]*\}', response_text)
             if json_match:
                 result = json.loads(json_match.group())
-                
+
                 article.summary = result.get('summary', '')
+                article.key_points = result.get('key_points', [])
                 article.ai_tags = result.get('tags', [])
                 article.sentiment = result.get('sentiment', 'neutral')
                 article.relevance_score = float(result.get('relevance_score', 0.5))
             else:
                 # Fallback if JSON parsing fails
                 article.summary = response_text[:500]
+                article.key_points = []
                 article.ai_tags = []
                 article.sentiment = 'neutral'
                 article.relevance_score = 0.5
@@ -87,6 +91,7 @@ Respond in JSON format only, no other text:
             print(f"Error processing article {article.id}: {e}")
             # Set defaults on error
             article.summary = article.title
+            article.key_points = []
             article.ai_tags = []
             article.sentiment = 'neutral'
             article.relevance_score = 0.5

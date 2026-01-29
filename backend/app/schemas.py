@@ -46,6 +46,7 @@ class ArticleSummary(BaseModel):
     url: str
     category: str
     summary: Optional[str] = None
+    key_points: Optional[list[str]] = None
     ai_tags: Optional[list[str]] = None
     sentiment: Optional[str] = None
     relevance_score: Optional[float] = None
@@ -65,6 +66,7 @@ class Article(ArticleBase):
     published_at: Optional[datetime] = None
     fetched_at: datetime
     summary: Optional[str] = None
+    key_points: Optional[list[str]] = None
     ai_tags: Optional[list[str]] = None
     sentiment: Optional[str] = None
     relevance_score: Optional[float] = None
