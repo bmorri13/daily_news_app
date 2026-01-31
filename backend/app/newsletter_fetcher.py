@@ -146,8 +146,10 @@ class NewsletterFetcher:
         elif 'summary' in latest_entry:
             rss_content = latest_entry.summary
 
-        # Use full content if available, otherwise use RSS content
-        content = full_content if full_content else rss_content
+        # Prefer RSS content (content:encoded) over web page content
+        # Beehiiv RSS feeds include full newsletter HTML, while web pages are JS SPAs
+        # that BeautifulSoup can't render properly
+        content = rss_content if rss_content else full_content
 
         # Create newsletter record
         newsletter = Newsletter(
