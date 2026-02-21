@@ -1,9 +1,13 @@
 from datetime import datetime, date, timezone, timedelta
 from typing import Optional
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc, text
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+import httpx
 
 from app.database import get_db, init_db
 from app.models import Article, Source, FetchLog, Newsletter
@@ -15,10 +19,52 @@ from app.config import get_settings
 
 settings = get_settings()
 
+scheduler = AsyncIOScheduler()
+
+
+async def scheduled_fetch():
+    """Trigger the fetch pipeline on schedule."""
+    print("APScheduler: Triggering scheduled fetch...")
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post("http://localhost:8000/api/fetch/trigger", timeout=30.0)
+            print(f"APScheduler: Fetch trigger returned {resp.status_code}")
+    except Exception as e:
+        print(f"APScheduler: Fetch trigger failed: {e}")
+
+
+async def scheduled_newsletter():
+    """Trigger newsletter fetch on schedule."""
+    print("APScheduler: Triggering scheduled newsletter fetch...")
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post("http://localhost:8000/api/newsletter/trigger", timeout=30.0)
+            print(f"APScheduler: Newsletter trigger returned {resp.status_code}")
+    except Exception as e:
+        print(f"APScheduler: Newsletter trigger failed: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app):
+    """Manage startup and shutdown events."""
+    # Startup
+    init_db()
+    print("Database initialized.")
+    scheduler.add_job(scheduled_fetch, CronTrigger(hour=12, minute=0), id="daily_fetch")
+    scheduler.add_job(scheduled_newsletter, CronTrigger(hour=12, minute=5), id="daily_newsletter")
+    scheduler.start()
+    print("APScheduler started: fetch at 12:00 UTC, newsletter at 12:05 UTC")
+    yield
+    # Shutdown
+    scheduler.shutdown()
+    print("APScheduler shut down.")
+
+
 app = FastAPI(
     title="News Aggregator API",
     description="AI-powered news aggregation for Cyber Security, AI, Cloud, and Crypto",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # CORS middleware for frontend
@@ -33,13 +79,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database on startup."""
-    init_db()
-    print("Database initialized.")
 
 
 # Health Check

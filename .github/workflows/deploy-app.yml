@@ -24,7 +24,7 @@ jobs:
       env:
         SSH_USER: ${{ secrets.SSH_USER }}
         REPO: ${{ github.repository }}
-        POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         CF_TOKEN: ${{ secrets.CF_TOKEN }}
         NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
@@ -47,7 +47,7 @@ jobs:
 
           # Write .env file AFTER clone/update
           printf '%s\n' \
-            'POSTGRES_PASSWORD=${POSTGRES_PASSWORD}' \
+            'DATABASE_URL=${DATABASE_URL}' \
             'ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}' \
             'CF_TOKEN=${CF_TOKEN}' \
             'NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}' \
