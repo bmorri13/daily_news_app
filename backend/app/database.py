@@ -12,7 +12,9 @@ if settings.database_url.startswith("sqlite"):
 engine = create_engine(
     settings.database_url,
     connect_args=connect_args,
-    echo=False  # Set to True for SQL debugging
+    echo=False,  # Set to True for SQL debugging
+    pool_pre_ping=True,  # Test connections before use (detects stale/dropped connections)
+    pool_recycle=280,  # Recycle connections before Supabase pooler timeout (300s)
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

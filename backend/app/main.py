@@ -28,7 +28,10 @@ async def scheduled_fetch():
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post("http://localhost:8000/api/fetch/trigger", timeout=30.0)
-            print(f"APScheduler: Fetch trigger returned {resp.status_code}")
+            if resp.status_code == 200:
+                print(f"APScheduler: Fetch trigger succeeded ({resp.status_code})")
+            else:
+                print(f"APScheduler: Fetch trigger returned unexpected status {resp.status_code}: {resp.text}")
     except Exception as e:
         print(f"APScheduler: Fetch trigger failed: {e}")
 
@@ -39,7 +42,10 @@ async def scheduled_newsletter():
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.post("http://localhost:8000/api/newsletter/trigger", timeout=30.0)
-            print(f"APScheduler: Newsletter trigger returned {resp.status_code}")
+            if resp.status_code == 200:
+                print(f"APScheduler: Newsletter trigger succeeded ({resp.status_code})")
+            else:
+                print(f"APScheduler: Newsletter trigger returned unexpected status {resp.status_code}: {resp.text}")
     except Exception as e:
         print(f"APScheduler: Newsletter trigger failed: {e}")
 
@@ -50,8 +56,8 @@ async def lifespan(app):
     # Startup
     init_db()
     print("Database initialized.")
-    scheduler.add_job(scheduled_fetch, CronTrigger(hour=12, minute=0), id="daily_fetch")
-    scheduler.add_job(scheduled_newsletter, CronTrigger(hour=12, minute=5), id="daily_newsletter")
+    scheduler.add_job(scheduled_fetch, CronTrigger(hour=12, minute=0), id="daily_fetch", misfire_grace_time=3600)
+    scheduler.add_job(scheduled_newsletter, CronTrigger(hour=12, minute=5), id="daily_newsletter", misfire_grace_time=3600)
     scheduler.start()
     print("APScheduler started: fetch at 12:00 UTC, newsletter at 12:05 UTC")
     yield
@@ -315,38 +321,45 @@ async def trigger_fetch(
 def run_fetch_job(log_id: int):
     """Background task to run fetch job."""
     from app.database import SessionLocal
-    
+
     db = SessionLocal()
-    
+
     try:
         fetch_log = db.query(FetchLog).filter(FetchLog.id == log_id).first()
-        errors = []
-        
+
         # Fetch RSS feeds
         fetcher = RSSFetcher(db)
         articles = fetcher.fetch_all_sources(articles_per_source=5)
         fetch_log.articles_fetched = len(articles)
-        
+
         # Process with AI
         processor = AIProcessor(db)
         processed_count = processor.process_unprocessed_articles(limit=100)
         fetch_log.articles_processed = processed_count
-        
+
         # Select top articles for today
         processor.select_top_articles_for_today(
             articles_per_category=settings.articles_per_category
         )
-        
+
         fetch_log.status = "completed"
         fetch_log.completed_at = datetime.now(timezone.utc)
-        
-    except Exception as e:
-        fetch_log.status = "failed"
-        fetch_log.errors = [str(e)]
-        fetch_log.completed_at = datetime.now(timezone.utc)
-    
-    finally:
         db.commit()
+
+    except Exception as e:
+        print(f"Fetch job {log_id} failed: {e}")
+        try:
+            db.rollback()
+            fetch_log = db.query(FetchLog).filter(FetchLog.id == log_id).first()
+            if fetch_log:
+                fetch_log.status = "failed"
+                fetch_log.errors = [str(e)]
+                fetch_log.completed_at = datetime.now(timezone.utc)
+                db.commit()
+        except Exception as rollback_err:
+            print(f"Fetch job {log_id} failed to update log after error: {rollback_err}")
+
+    finally:
         db.close()
 
 
@@ -465,6 +478,10 @@ def run_newsletter_job():
 
     except Exception as e:
         print(f"Error in newsletter job: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
     finally:
         db.close()
