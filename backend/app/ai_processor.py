@@ -105,17 +105,17 @@ Respond in JSON format only, no other text:
         articles = self.db.query(Article).filter(
             Article.processed == False
         ).limit(limit).all()
-        
+
         processed_count = 0
-        
+
         for article in articles:
             print(f"Processing: {article.title[:50]}...")
             self.process_article(article)
+            self.db.commit()
             processed_count += 1
-        
-        self.db.commit()
+
         print(f"Processed {processed_count} articles.")
-        
+
         return processed_count
     
     def select_top_articles_for_today(
