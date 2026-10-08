@@ -1,5 +1,6 @@
 import feedparser
 import httpx
+import nh3
 from datetime import datetime, timezone
 from typing import Optional
 from dateutil import parser as date_parser
@@ -7,6 +8,21 @@ from sqlalchemy.orm import Session
 from bs4 import BeautifulSoup
 
 from app.models import Newsletter
+
+
+# The frontend's newsletter styles target class names (share/social/sponsor
+# blocks), so keep `class` on top of nh3's default safe attributes.
+_ALLOWED_ATTRIBUTES = {
+    **{tag: set(attrs) for tag, attrs in nh3.ALLOWED_ATTRIBUTES.items()},
+    "*": {"class"},
+}
+
+
+def sanitize_html(html: Optional[str]) -> Optional[str]:
+    """Strip scripts, event handlers and unsafe URLs from untrusted HTML."""
+    if not html:
+        return html
+    return nh3.clean(html, attributes=_ALLOWED_ATTRIBUTES)
 
 
 class NewsletterFetcher:
@@ -150,6 +166,9 @@ class NewsletterFetcher:
         # Beehiiv RSS feeds include full newsletter HTML, while web pages are JS SPAs
         # that BeautifulSoup can't render properly
         content = rss_content if rss_content else full_content
+
+        # Content comes from an external site, so sanitize it before storing
+        content = sanitize_html(content)
 
         # Create newsletter record
         newsletter = Newsletter(
