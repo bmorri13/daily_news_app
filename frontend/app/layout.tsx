@@ -1,6 +1,22 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
+import { Geist, Newsreader } from 'next/font/google';
 import './globals.css';
+
+// Serif for headlines, clean sans for UI and body copy
+const serif = Newsreader({
+  subsets: ['latin'],
+  axes: ['opsz'],
+  style: ['normal', 'italic'],
+  variable: '--font-serif',
+  display: 'swap',
+});
+
+const sans = Geist({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'Bmosan Daily News Feed - AI-Curated Daily News',
@@ -20,7 +36,7 @@ export default function RootLayout({
   const gaId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
 
   return (
-    <html lang="en">
+    <html lang="en" className={`${serif.variable} ${sans.variable}`}>
       <body className="antialiased">
         {children}
       </body>

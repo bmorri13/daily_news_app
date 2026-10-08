@@ -1,40 +1,26 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  Zap,
-  FileText,
-  Rss,
-  Clock,
-  CheckCircle,
-  XCircle,
-  Loader2,
-  ChevronRight,
-  ChevronDown,
-  BarChart3,
-  ExternalLink
-} from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, ChevronRight, ArrowUpRight } from 'lucide-react';
 import { formatDistanceToNow, addHours, isFuture } from 'date-fns';
-import { Stats, Source, getCategoryColor, getCategoryLabel, getSources } from '@/lib/api';
+import { Stats, Source, getSources } from '@/lib/api';
+import { getCategory } from '@/lib/categories';
 
 interface StatsPanelProps {
   stats: Stats | null;
-  loading?: boolean;
 }
 
-export default function StatsPanel({ stats, loading }: StatsPanelProps) {
+export default function StatsPanel({ stats }: StatsPanelProps) {
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [sources, setSources] = useState<Source[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
 
-  // Fetch sources on mount
   useEffect(() => {
     const fetchSources = async () => {
       setSourcesLoading(true);
       try {
-        const data = await getSources();
-        setSources(data);
+        setSources(await getSources());
       } catch (err) {
         console.error('Failed to fetch sources:', err);
       } finally {
@@ -56,26 +42,10 @@ export default function StatsPanel({ stats, loading }: StatsPanelProps) {
     });
   };
 
-  const getSourcesForCategory = (category: string): Source[] => {
-    return sources.filter(s => s.category === category && s.active);
-  };
-
-  if (loading) {
-    return (
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] p-6 rounded-lg">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="animate-spin text-[var(--accent-primary)]" size={24} />
-        </div>
-      </div>
-    );
-  }
-
   if (!stats) {
     return (
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] p-6 rounded-lg">
-        <p className="text-center text-[var(--text-muted)] py-8 text-sm">
-          Unable to load statistics
-        </p>
+      <div className="rounded-xl border border-line p-5">
+        <p className="text-sm text-fg-subtle">Feed stats aren&apos;t available right now.</p>
       </div>
     );
   }
@@ -84,289 +54,147 @@ export default function StatsPanel({ stats, loading }: StatsPanelProps) {
     ? new Date(stats.last_fetch.started_at)
     : null;
 
-  const lastFetchTime = lastFetchDate
-    ? formatDistanceToNow(lastFetchDate, { addSuffix: false }) + ' ago'
-    : 'Never';
-
-  const nextSyncTime = lastFetchDate
-    ? (() => {
-        const nextSync = addHours(lastFetchDate, stats.fetch_interval_hours);
-        if (isFuture(nextSync)) {
-          return 'in ' + formatDistanceToNow(nextSync, { addSuffix: false });
-        }
-        return 'soon';
-      })()
+  const nextSync = lastFetchDate ? addHours(lastFetchDate, stats.fetch_interval_hours) : null;
+  const nextSyncLabel = nextSync
+    ? isFuture(nextSync) ? `in ${formatDistanceToNow(nextSync)}` : 'soon'
     : null;
 
   const totalArticles = stats.total_articles;
+  const status = stats.last_fetch?.status;
 
   return (
-    <div className="relative">
-      {/* Main Stats Card */}
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] overflow-hidden rounded-lg">
-        {/* Header */}
-        <div className="px-5 pt-5 pb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap size={14} className="text-[var(--accent-primary)]" />
-              <span className="font-display text-sm text-[var(--text-secondary)]">
-                Feed Stats
-              </span>
-            </div>
+    <section aria-labelledby="stats-heading" className="rounded-xl border border-line">
+      <div className="p-5">
+        <h2 id="stats-heading" className="text-sm font-medium text-fg-muted mb-4">
+          Feed stats
+        </h2>
 
-            {/* Live indicator */}
-            <div className="flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--accent-primary)] opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--accent-primary)]"></span>
-              </span>
-              <span className="font-display text-xs text-[var(--accent-primary)]">Live</span>
-            </div>
+        {/* Totals */}
+        <dl className="grid grid-cols-2 gap-4 mb-5">
+          <div>
+            <dt className="text-xs text-fg-subtle">Articles</dt>
+            <dd className="text-2xl font-semibold text-fg tabular-nums">{totalArticles.toLocaleString()}</dd>
           </div>
-        </div>
-
-        {/* Big Stats Row */}
-        <div className="px-5 pb-5">
-          <div className="flex items-end justify-between gap-4">
-            {/* Articles */}
-            <div className="flex-1">
-              <div className="flex items-center gap-1.5 mb-1">
-                <FileText size={12} className="text-[var(--text-muted)]" />
-                <span className="text-xs text-[var(--text-muted)]">Articles</span>
-              </div>
-              <div className="font-display text-4xl font-bold text-[var(--text-primary)]">
-                {totalArticles}
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="w-px h-12 bg-[var(--border-subtle)]" />
-
-            {/* Sources */}
-            <div className="flex-1 text-right">
-              <div className="flex items-center justify-end gap-1.5 mb-1">
-                <span className="text-xs text-[var(--text-muted)]">Sources</span>
-                <Rss size={12} className="text-[var(--text-muted)]" />
-              </div>
-              <div className="font-display text-4xl font-bold text-[var(--text-primary)]">
-                {stats.active_sources}
-              </div>
-            </div>
+          <div>
+            <dt className="text-xs text-fg-subtle">Active sources</dt>
+            <dd className="text-2xl font-semibold text-fg tabular-nums">{stats.active_sources}</dd>
           </div>
-        </div>
+        </dl>
 
-        {/* Category Distribution */}
-        <div className="px-5 pb-4">
-          <div className="flex items-center gap-2 mb-3">
-            <BarChart3 size={12} className="text-[var(--text-muted)]" />
-            <span className="text-xs text-[var(--text-muted)]">Distribution</span>
-          </div>
-
-          {/* Visual Bar Distribution - with segment dividers for data clarity */}
-          <div className="flex h-2.5 rounded-full overflow-hidden bg-[var(--bg-tertiary)] relative">
-            {stats.categories.map((category, index) => {
-              const count = stats.articles_by_category[category] || 0;
-              const percentage = totalArticles > 0 ? (count / totalArticles) * 100 : 0;
-              const color = getCategoryColor(category);
-              const isLast = index === stats.categories.length - 1;
-
-              return (
-                <div
-                  key={category}
-                  className="h-full transition-all duration-300 first:rounded-l-full last:rounded-r-full relative"
-                  style={{
-                    width: `${percentage}%`,
-                    backgroundColor: color,
-                    opacity: hoveredCategory && hoveredCategory !== category ? 0.3 : 1,
-                  }}
-                  onMouseEnter={() => setHoveredCategory(category)}
-                  onMouseLeave={() => setHoveredCategory(null)}
-                >
-                  {/* Segment divider */}
-                  {!isLast && percentage > 0 && (
-                    <div
-                      className="absolute right-0 top-0 w-[1px] h-full bg-[var(--bg-primary)]"
-                      style={{ opacity: 0.6 }}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Category List */}
-        <div className="border-t border-[var(--border-subtle)]">
-          {stats.categories.map((category, index) => {
+        {/* Distribution */}
+        <div className="flex h-2 gap-0.5 rounded-full overflow-hidden bg-surface-raised" aria-hidden>
+          {stats.categories.map(category => {
             const count = stats.articles_by_category[category] || 0;
-            const percentage = totalArticles > 0 ? Math.round((count / totalArticles) * 100) : 0;
-            const color = getCategoryColor(category);
-            const isHovered = hoveredCategory === category;
-            const isExpanded = expandedCategories.has(category);
-            const categorySources = getSourcesForCategory(category);
-
+            const percentage = totalArticles > 0 ? (count / totalArticles) * 100 : 0;
+            if (percentage === 0) return null;
             return (
-              <div key={category}>
-                <div
-                  className={`
-                    relative px-5 py-3 cursor-pointer transition-all duration-200
-                    ${!isExpanded && index !== stats.categories.length - 1 ? 'border-b border-[var(--border-subtle)]' : ''}
-                    hover:bg-[var(--surface-hover)]
-                  `}
-                  onMouseEnter={() => setHoveredCategory(category)}
-                  onMouseLeave={() => setHoveredCategory(null)}
-                  onClick={() => toggleCategory(category)}
-                >
-                  <div className="relative flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className="w-2 h-2 rounded-full transition-all duration-200"
-                        style={{
-                          backgroundColor: color,
-                          boxShadow: isHovered ? `0 0 8px ${color}` : 'none',
-                        }}
-                      />
-                      <span
-                        className="text-sm transition-colors duration-200"
-                        style={{ color: isHovered || isExpanded ? color : 'var(--text-secondary)' }}
-                      >
-                        {getCategoryLabel(category)}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <span
-                        className="font-display text-sm font-medium tabular-nums"
-                        style={{ color: isHovered || isExpanded ? color : 'var(--text-primary)' }}
-                      >
-                        {count}
-                      </span>
-                      <span className="text-xs text-[var(--text-muted)] w-8 text-right">
-                        {percentage}%
-                      </span>
-                      {isExpanded ? (
-                        <ChevronDown
-                          size={14}
-                          className="transition-all duration-200"
-                          style={{ color: color }}
-                        />
-                      ) : (
-                        <ChevronRight
-                          size={14}
-                          className="transition-all duration-200"
-                          style={{
-                            color: isHovered ? color : 'var(--text-muted)',
-                            opacity: isHovered ? 1 : 0.5,
-                          }}
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expanded Sources List */}
-                {isExpanded && (
-                  <div
-                    className={`
-                      bg-[var(--bg-primary)] px-5 py-3
-                      ${index !== stats.categories.length - 1 ? 'border-b border-[var(--border-subtle)]' : ''}
-                    `}
-                  >
-                    <div className="flex items-center gap-2 mb-2">
-                      <Rss size={10} className="text-[var(--text-muted)]" />
-                      <span className="text-xs text-[var(--text-muted)]">
-                        {categorySources.length} RSS {categorySources.length === 1 ? 'Feed' : 'Feeds'}
-                      </span>
-                    </div>
-                    <div className="space-y-1.5">
-                      {sourcesLoading ? (
-                        <div className="flex items-center gap-2 py-2">
-                          <Loader2 size={12} className="animate-spin text-[var(--text-muted)]" />
-                          <span className="text-xs text-[var(--text-muted)]">Loading sources...</span>
-                        </div>
-                      ) : categorySources.length > 0 ? (
-                        categorySources.map(source => (
-                          <a
-                            key={source.id}
-                            href={source.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-between gap-2 py-1.5 px-2 rounded hover:bg-[var(--surface-hover)] transition-colors group"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <span
-                              className="text-xs text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors truncate"
-                            >
-                              {source.name}
-                            </span>
-                            <ExternalLink
-                              size={10}
-                              className="text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] transition-colors flex-shrink-0"
-                            />
-                          </a>
-                        ))
-                      ) : (
-                        <span className="text-xs text-[var(--text-muted)]">No sources available</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <div
+                key={category}
+                className="h-full transition-opacity duration-200"
+                style={{
+                  width: `${percentage}%`,
+                  backgroundColor: getCategory(category).color,
+                  opacity: hoveredCategory && hoveredCategory !== category ? 0.3 : 1,
+                }}
+              />
             );
           })}
         </div>
+      </div>
 
-        {/* Sync Status Footer */}
-        <div className="px-5 py-4 bg-[var(--bg-primary)] border-t border-[var(--border-subtle)]">
-          <div className="flex items-center justify-between">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <Clock size={14} className="text-[var(--text-muted)]" />
-                <span className="text-sm text-[var(--text-secondary)]">
-                  Last sync: {lastFetchTime}
-                </span>
-              </div>
-              {nextSyncTime && (
-                <div className="flex items-center gap-2">
-                  <Clock size={14} className="text-[var(--text-muted)] opacity-0" />
-                  <span className="text-xs text-[var(--text-muted)]">
-                    Next sync: {nextSyncTime}
-                  </span>
+      {/* Category breakdown */}
+      <ul className="border-t border-line divide-y divide-[var(--border)]">
+        {stats.categories.map(category => {
+          const { label, shortLabel, color } = getCategory(category);
+          const count = stats.articles_by_category[category] || 0;
+          const percentage = totalArticles > 0 ? Math.round((count / totalArticles) * 100) : 0;
+          const isExpanded = expandedCategories.has(category);
+          const categorySources = sources.filter(s => s.category === category && s.active);
+          const panelId = `sources-${category}`;
+
+          return (
+            <li key={category}>
+              <button
+                onClick={() => toggleCategory(category)}
+                onMouseEnter={() => setHoveredCategory(category)}
+                onMouseLeave={() => setHoveredCategory(null)}
+                onFocus={() => setHoveredCategory(category)}
+                onBlur={() => setHoveredCategory(null)}
+                aria-expanded={isExpanded}
+                aria-controls={panelId}
+                className="w-full flex items-center gap-2.5 px-5 py-3 text-left hover:bg-surface transition-colors duration-150"
+              >
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} aria-hidden />
+                <span className="flex-1 text-sm text-fg-muted" title={label}>{shortLabel}</span>
+                <span className="text-sm font-medium text-fg tabular-nums">{count}</span>
+                <span className="w-9 text-right text-xs text-fg-subtle tabular-nums">{percentage}%</span>
+                <ChevronRight
+                  size={14}
+                  aria-hidden
+                  className={`text-fg-subtle transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
+                />
+              </button>
+
+              {isExpanded && (
+                <div id={panelId} className="px-5 pb-3 pl-[2.375rem]">
+                  {sourcesLoading ? (
+                    <p className="flex items-center gap-2 py-1 text-xs text-fg-subtle">
+                      <Loader2 size={12} className="animate-spin" aria-hidden />
+                      Loading sources…
+                    </p>
+                  ) : categorySources.length > 0 ? (
+                    <ul className="space-y-0.5">
+                      {categorySources.map(source => (
+                        <li key={source.id}>
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group flex items-center justify-between gap-2 py-1 text-xs text-fg-subtle hover:text-fg transition-colors duration-150"
+                          >
+                            <span className="truncate">{source.name}</span>
+                            <ArrowUpRight size={12} className="flex-shrink-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity" aria-hidden />
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="py-1 text-xs text-fg-subtle">No active sources</p>
+                  )}
                 </div>
               )}
-            </div>
+            </li>
+          );
+        })}
+      </ul>
 
-            {stats.last_fetch && (
-              <div className="flex items-center gap-1.5">
-                {stats.last_fetch.status === 'completed' ? (
-                  <CheckCircle size={14} className="text-[var(--accent-primary)]" />
-                ) : stats.last_fetch.status === 'failed' ? (
-                  <XCircle size={14} className="text-red-400" />
-                ) : (
-                  <Loader2 size={14} className="text-[var(--accent-primary)] animate-spin" />
-                )}
-                <span className={`font-display text-xs font-medium ${
-                  stats.last_fetch.status === 'completed'
-                    ? 'text-[var(--accent-primary)]'
-                    : stats.last_fetch.status === 'failed'
-                      ? 'text-red-400'
-                      : 'text-[var(--accent-primary)]'
-                }`}>
-                  {stats.last_fetch.status === 'completed' ? 'Synced' : stats.last_fetch.status}
-                </span>
-              </div>
-            )}
-          </div>
-
-          {stats.last_fetch && stats.last_fetch.articles_fetched > 0 && (
-            <div className="mt-2 pt-2 border-t border-[var(--border-subtle)]">
-              <span className="text-xs text-[var(--text-muted)]">
-                +{stats.last_fetch.articles_fetched} new articles added
-              </span>
-            </div>
-          )}
-        </div>
+      {/* Sync status */}
+      <div className="px-5 py-4 border-t border-line text-sm">
+        <p className="flex items-center gap-2 text-fg-muted">
+          {status === 'completed' ? (
+            <CheckCircle2 size={14} className="text-positive" aria-hidden />
+          ) : status === 'failed' ? (
+            <XCircle size={14} className="text-negative" aria-hidden />
+          ) : status ? (
+            <Loader2 size={14} className="text-fg-subtle animate-spin" aria-hidden />
+          ) : null}
+          {lastFetchDate
+            ? status === 'failed'
+              ? `Last sync failed ${formatDistanceToNow(lastFetchDate)} ago`
+              : status === 'completed'
+                ? `Synced ${formatDistanceToNow(lastFetchDate)} ago`
+                : 'Syncing now…'
+            : 'Not synced yet'}
+        </p>
+        {(nextSyncLabel || (stats.last_fetch?.articles_fetched ?? 0) > 0) && (
+          <p className="mt-1 text-xs text-fg-subtle">
+            {stats.last_fetch && stats.last_fetch.articles_fetched > 0 &&
+              `${stats.last_fetch.articles_fetched} new articles`}
+            {stats.last_fetch && stats.last_fetch.articles_fetched > 0 && nextSyncLabel && ' · '}
+            {nextSyncLabel && `Next sync ${nextSyncLabel}`}
+          </p>
+        )}
       </div>
-    </div>
+    </section>
   );
 }

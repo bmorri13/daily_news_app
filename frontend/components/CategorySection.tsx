@@ -1,96 +1,53 @@
 'use client';
 
-import { Shield, Brain, Cloud, Bitcoin } from 'lucide-react';
-import { Article, getCategoryColor, getCategoryLabel } from '@/lib/api';
+import { Article } from '@/lib/api';
+import { getCategory } from '@/lib/categories';
 import ArticleCard from './ArticleCard';
 
 interface CategorySectionProps {
   category: string;
   articles: Article[];
-  sectionIndex?: number;
   onArticleClick?: (article: Article) => void;
 }
 
-const categoryIcons: { [key: string]: React.ReactNode } = {
-  cyber: <Shield size={18} strokeWidth={2} />,
-  ai: <Brain size={18} strokeWidth={2} />,
-  cloud: <Cloud size={18} strokeWidth={2} />,
-  crypto: <Bitcoin size={18} strokeWidth={2} />,
-};
-
-const categoryDescriptions: { [key: string]: string } = {
-  cyber: 'Latest threats, vulnerabilities, and security intelligence',
-  ai: 'Machine learning breakthroughs and AI industry news',
-  cloud: 'Infrastructure, DevOps, and cloud platform updates',
-  crypto: 'Blockchain developments and market movements',
-};
-
-export default function CategorySection({ category, articles, sectionIndex = 0, onArticleClick }: CategorySectionProps) {
-  const color = getCategoryColor(category);
-  const label = getCategoryLabel(category);
-  const icon = categoryIcons[category];
-  const description = categoryDescriptions[category];
-
+export default function CategorySection({ category, articles, onArticleClick }: CategorySectionProps) {
   if (!articles || articles.length === 0) {
     return null;
   }
 
+  const { label, description, color } = getCategory(category);
+  const [lead, ...rest] = articles;
+  const headingId = `${category}-heading`;
+
   return (
-    <section
-      id={category}
-      className="mb-14 animate-fade-in-up"
-      style={{ animationDelay: `${sectionIndex * 150}ms` }}
-    >
-      {/* Section Header */}
-      <div className="mb-6">
-        {/* Top line with category indicator */}
-        <div className="flex items-center gap-4 mb-4">
-          <div
-            className="flex items-center justify-center w-10 h-10 border rounded-lg"
-            style={{
-              borderColor: color,
-              color: color,
-            }}
-          >
-            {icon}
+    <section id={category} aria-labelledby={headingId} className="scroll-mt-40 mb-16 last:mb-0">
+      {/* Section header */}
+      <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1 pb-3 mb-6 border-b border-line">
+        <h2 id={headingId} className="flex items-center gap-2.5 font-serif text-2xl font-medium tracking-tight text-fg">
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} aria-hidden />
+          {label}
+        </h2>
+        <p className="text-sm text-fg-subtle">{description}</p>
+      </header>
+
+      {/* Lead story beside a list of the rest; fills cleanly at any count */}
+      <div
+        className={`grid gap-x-12 gap-y-8 ${rest.length > 0 ? 'lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]' : ''}`}
+      >
+        <ArticleCard article={lead} featured onClick={() => onArticleClick?.(lead)} />
+
+        {rest.length > 0 && (
+          <div className="divide-y divide-[var(--border)] pt-8 border-t border-line lg:pt-0 lg:border-t-0 lg:pl-12 lg:border-l">
+            {rest.map(article => (
+              <ArticleCard
+                key={article.id}
+                article={article}
+                onClick={() => onArticleClick?.(article)}
+              />
+            ))}
           </div>
-
-          <div className="flex-1 h-px" style={{ background: `linear-gradient(90deg, ${color}50 0%, transparent 100%)` }} />
-
-          <span className="font-display text-sm text-[var(--text-muted)]">
-            {articles.length} {articles.length === 1 ? 'story' : 'stories'}
-          </span>
-        </div>
-
-        {/* Title row */}
-        <div>
-          <h2
-            className="font-display text-2xl md:text-3xl font-bold mb-1"
-            style={{ color }}
-          >
-            {label}
-          </h2>
-          <p className="text-sm text-[var(--text-muted)] max-w-md">
-            {description}
-          </p>
-        </div>
+        )}
       </div>
-
-      {/* Articles Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {articles.map((article, index) => (
-          <ArticleCard
-            key={article.id}
-            article={article}
-            featured={index === 0 && articles.length > 3}
-            index={index}
-            onClick={() => onArticleClick?.(article)}
-          />
-        ))}
-      </div>
-
-      {/* Section bottom divider */}
-      <div className="mt-10 h-px bg-[var(--border-subtle)]" />
     </section>
   );
 }

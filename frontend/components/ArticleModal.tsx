@@ -1,17 +1,10 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
-import {
-  X,
-  ExternalLink,
-  Clock,
-  TrendingUp,
-  Sparkles,
-  Target,
-  Lightbulb
-} from 'lucide-react';
+import { useEffect, useRef, KeyboardEvent } from 'react';
+import { X, ArrowUpRight, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Article, getCategoryColor } from '@/lib/api';
+import { Article } from '@/lib/api';
+import { getCategory } from '@/lib/categories';
 
 interface ArticleModalProps {
   article: Article | null;
@@ -19,256 +12,191 @@ interface ArticleModalProps {
   onClose: () => void;
 }
 
-export default function ArticleModal({ article, isOpen, onClose }: ArticleModalProps) {
-  const handleEscape = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') onClose();
-  }, [onClose]);
+const SENTIMENT = {
+  positive: { label: 'Positive', color: 'var(--positive)', Icon: ArrowUp },
+  negative: { label: 'Negative', color: 'var(--negative)', Icon: ArrowDown },
+  neutral: { label: 'Neutral', color: 'var(--fg-subtle)', Icon: Minus },
+};
 
+const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+export default function ArticleModal({ article, isOpen, onClose }: ArticleModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  // Lock scroll, move focus in, and restore focus to the opener on close
   useEffect(() => {
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'hidden';
-    }
+    if (!isOpen) return;
+    const opener = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
     return () => {
-      document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
+      opener?.focus();
     };
-  }, [isOpen, handleEscape]);
+  }, [isOpen]);
 
   if (!isOpen || !article) return null;
 
-  const categoryColor = getCategoryColor(article.category);
+  const category = getCategory(article.category);
+  const sentiment = SENTIMENT[article.sentiment ?? 'neutral'];
 
-  const formattedDate = article.published_at
-    ? formatDistanceToNow(new Date(article.published_at), { addSuffix: true })
-    : 'Unknown date';
-
-  const fullDate = article.published_at
-    ? format(new Date(article.published_at), 'MMMM d, yyyy • h:mm a')
-    : null;
-
+  const publishedAt = article.published_at ? new Date(article.published_at) : null;
   const relevancePercent = article.relevance_score
     ? Math.round(article.relevance_score * 100)
     : null;
-
-  // Use key_points from API (distinct from summary)
   const keyPoints = article.key_points || [];
 
-  const getSentimentInfo = (sentiment: string | null) => {
-    switch (sentiment) {
-      case 'positive':
-        return { label: 'Positive Outlook', color: 'var(--cyber-primary)', bg: 'var(--cyber-glow)' };
-      case 'negative':
-        return { label: 'Negative Outlook', color: '#ff4757', bg: 'rgba(255, 71, 87, 0.15)' };
-      default:
-        return { label: 'Neutral', color: 'var(--text-secondary)', bg: 'rgba(161, 161, 170, 0.1)' };
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      onClose();
+      return;
+    }
+    if (e.key !== 'Tab' || !dialogRef.current) return;
+    // Keep focus inside the dialog
+    const items = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE));
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last?.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first?.focus();
     }
   };
 
-  const sentimentInfo = getSentimentInfo(article.sentiment);
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
+    <div
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center sm:p-6"
+      onKeyDown={handleKeyDown}
+    >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/85 backdrop-blur-sm animate-fade-in"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
+        aria-hidden
       />
 
-      {/* Modal */}
       <div
-        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-secondary)] border border-[var(--border-subtle)] shadow-2xl animate-fade-in-up rounded-lg"
-        style={{ animationDuration: '0.3s' }}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="article-modal-title"
+        tabIndex={-1}
+        className="relative outline-none w-full sm:max-w-2xl max-h-[92vh] overflow-y-auto bg-surface border border-line rounded-t-xl sm:rounded-xl shadow-2xl shadow-black/50 animate-pop-in"
       >
-        {/* Top accent bar */}
-        <div
-          className="absolute top-0 left-0 right-0 h-1 rounded-t-lg"
-          style={{ background: categoryColor }}
-        />
-
-        {/* Close button */}
         <button
+          ref={closeRef}
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center bg-[var(--bg-tertiary)] border border-[var(--border-subtle)] hover:border-[var(--accent-primary)] hover:bg-[var(--surface-hover)] transition-all rounded-md"
+          aria-label="Close"
+          className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-md text-fg-subtle hover:text-fg hover:bg-surface-raised transition-colors duration-150"
         >
-          <X size={18} className="text-[var(--text-secondary)]" />
+          <X size={18} aria-hidden />
         </button>
 
-        {/* Content */}
-        <div className="p-6 md:p-8">
+        <div className="p-6 sm:p-8">
           {/* Header */}
-          <div className="mb-6 pr-12">
-            {/* Meta */}
-            <div className="flex items-center gap-3 mb-4">
-              {article.source_name && (
-                <span
-                  className="category-badge"
-                  style={{
-                    ['--category-color' as string]: categoryColor,
-                    ['--category-glow' as string]: `${categoryColor}20`,
-                  }}
-                >
-                  {article.source_name}
-                </span>
-              )}
-              <span className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
-                <Clock size={12} />
-                {formattedDate}
+          <header className="mb-8 pr-10">
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-fg-subtle mb-3">
+              <span className="flex items-center gap-1.5 font-medium" style={{ color: category.color }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: category.color }} aria-hidden />
+                {category.shortLabel}
               </span>
-            </div>
+              {article.source_name && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="text-fg-muted">{article.source_name}</span>
+                </>
+              )}
+              {publishedAt && (
+                <>
+                  <span aria-hidden>·</span>
+                  <time dateTime={article.published_at ?? undefined} title={format(publishedAt, 'MMMM d, yyyy, h:mm a')}>
+                    {formatDistanceToNow(publishedAt, { addSuffix: true })}
+                  </time>
+                </>
+              )}
+            </p>
 
-            {/* Title */}
-            <h2 className="font-display text-2xl md:text-3xl font-bold text-[var(--text-primary)] leading-tight mb-3">
+            <h2
+              id="article-modal-title"
+              className="font-serif text-2xl sm:text-3xl font-medium tracking-tight text-fg text-pretty"
+            >
               {article.title}
             </h2>
+          </header>
 
-            {fullDate && (
-              <p className="text-sm text-[var(--text-muted)]">
-                Published {fullDate}
-              </p>
-            )}
-          </div>
-
-          {/* Divider */}
-          <div className="section-divider mb-6" />
-
-          {/* Executive Summary Section */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles size={16} style={{ color: categoryColor }} />
-              <span className="font-display text-xs tracking-[0.15em] text-[var(--text-muted)] uppercase">
-                Executive Summary
-              </span>
-            </div>
-
+          {/* Summary */}
+          <section className="mb-8">
+            <h3 className="text-sm font-medium text-fg-subtle mb-2">Summary</h3>
             {article.summary ? (
-              <div className="space-y-5">
-                {/* Summary Overview */}
-                <div className="bg-[var(--bg-primary)] border-l-2 p-4" style={{ borderColor: categoryColor }}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <Target size={14} style={{ color: categoryColor }} />
-                    <span className="font-display text-[10px] tracking-[0.1em] uppercase" style={{ color: categoryColor }}>
-                      Overview
-                    </span>
-                  </div>
-                  <p className="text-[var(--text-primary)] leading-relaxed">
-                    {article.summary}
-                  </p>
-                </div>
-
-                {/* Key Points */}
-                {keyPoints.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Lightbulb size={14} style={{ color: categoryColor }} />
-                      <span className="font-display text-[10px] tracking-[0.1em] uppercase" style={{ color: categoryColor }}>
-                        Key Points
-                      </span>
-                    </div>
-                    <ul className="space-y-3">
-                      {keyPoints.map((point, idx) => (
-                        <li key={idx} className="flex items-start gap-3">
-                          <span
-                            className="flex-shrink-0 w-5 h-5 flex items-center justify-center text-[10px] font-display font-bold mt-0.5"
-                            style={{
-                              backgroundColor: `${categoryColor}20`,
-                              color: categoryColor,
-                            }}
-                          >
-                            {idx + 1}
-                          </span>
-                          <span className="text-[var(--text-secondary)] leading-relaxed">
-                            {point}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
+              <p className="text-base text-fg leading-relaxed">{article.summary}</p>
             ) : (
-              <p className="text-[var(--text-muted)] italic">
-                No summary available for this article.
-              </p>
+              <p className="text-fg-subtle">No summary is available for this article.</p>
             )}
-          </div>
+          </section>
 
-          {/* Metrics Bar */}
-          <div className="flex flex-wrap items-center gap-4 p-4 bg-[var(--bg-primary)] border border-[var(--border-subtle)] mb-6">
-            {/* Sentiment */}
-            <div className="flex items-center gap-2">
-              <span className="font-display text-[10px] tracking-wider text-[var(--text-muted)] uppercase">
-                Sentiment:
-              </span>
-              <span
-                className="text-xs font-semibold px-2 py-1"
-                style={{ color: sentimentInfo.color, background: sentimentInfo.bg }}
-              >
-                {sentimentInfo.label}
-              </span>
-            </div>
-
-            {/* Relevance */}
-            {relevancePercent !== null && (
-              <div className="flex items-center gap-2">
-                <span className="font-display text-[10px] tracking-wider text-[var(--text-muted)] uppercase">
-                  Relevance:
-                </span>
-                <span className="flex items-center gap-1 text-sm">
-                  <TrendingUp size={14} style={{ color: categoryColor }} />
-                  <span className="font-display font-bold" style={{ color: categoryColor }}>
-                    {relevancePercent}%
-                  </span>
-                </span>
-              </div>
-            )}
-
-            {/* Category */}
-            <div className="flex items-center gap-2">
-              <span className="font-display text-[10px] tracking-wider text-[var(--text-muted)] uppercase">
-                Category:
-              </span>
-              <span className="text-xs font-semibold capitalize" style={{ color: categoryColor }}>
-                {article.category}
-              </span>
-            </div>
-          </div>
-
-          {/* Tags */}
-          {article.ai_tags && article.ai_tags.length > 0 && (
-            <div className="mb-6">
-              <span className="font-display text-[10px] tracking-[0.1em] text-[var(--text-muted)] uppercase block mb-3">
-                Topics
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {article.ai_tags.map((tag, idx) => (
-                  <span key={idx} className="tag-pill">
-                    {tag}
-                  </span>
+          {/* Key points */}
+          {keyPoints.length > 0 && (
+            <section className="mb-8">
+              <h3 className="text-sm font-medium text-fg-subtle mb-3">Key points</h3>
+              <ol className="space-y-3">
+                {keyPoints.map((point, idx) => (
+                  <li key={idx} className="flex gap-4 text-fg-muted leading-relaxed">
+                    <span className="flex-shrink-0 w-5 text-right text-sm font-medium text-fg-subtle tabular-nums pt-0.5">
+                      {idx + 1}
+                    </span>
+                    <span>{point}</span>
+                  </li>
                 ))}
-              </div>
-            </div>
+              </ol>
+            </section>
           )}
 
-          {/* CTA */}
+          {/* Details */}
+          <dl className="grid grid-cols-2 sm:flex sm:flex-wrap gap-x-10 gap-y-4 py-5 mb-6 border-y border-line">
+            <div>
+              <dt className="text-xs text-fg-subtle mb-1">Sentiment</dt>
+              <dd className="flex items-center gap-1.5 text-sm font-medium" style={{ color: sentiment.color }}>
+                <sentiment.Icon size={14} aria-hidden />
+                {sentiment.label}
+              </dd>
+            </div>
+            {relevancePercent !== null && (
+              <div>
+                <dt className="text-xs text-fg-subtle mb-1">Relevance</dt>
+                <dd className="text-sm font-medium text-fg tabular-nums">{relevancePercent}%</dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-xs text-fg-subtle mb-1">Category</dt>
+              <dd className="text-sm font-medium text-fg">{category.label}</dd>
+            </div>
+          </dl>
+
+          {/* Topics */}
+          {article.ai_tags && article.ai_tags.length > 0 && (
+            <section className="mb-8">
+              <h3 className="sr-only">Topics</h3>
+              <ul className="flex flex-wrap gap-2">
+                {article.ai_tags.map((tag, idx) => (
+                  <li key={idx} className="tag">{tag}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Primary action */}
           <a
             href={article.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-3 w-full py-4 font-display text-sm font-medium transition-all duration-200 rounded-md hover:shadow-lg"
-            style={{
-              background: categoryColor,
-              color: 'var(--bg-primary)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.boxShadow = `0 0 20px ${categoryColor}40`;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.boxShadow = 'none';
-            }}
+            className="flex items-center justify-center gap-2 w-full h-12 rounded-lg bg-accent text-accent-fg text-sm font-semibold hover:brightness-110 transition-[filter] duration-150"
           >
-            <span>Read Full Article</span>
-            <ExternalLink size={16} />
+            Read the full article{article.source_name ? ` on ${article.source_name}` : ''}
+            <ArrowUpRight size={16} aria-hidden />
           </a>
         </div>
       </div>
