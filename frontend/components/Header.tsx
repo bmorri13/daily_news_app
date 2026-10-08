@@ -1,17 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import {
-  Calendar,
-  ChevronDown,
-  Zap,
-  ArrowLeft,
-  Newspaper,
-  Shield
-} from 'lucide-react';
-import { format, isToday } from 'date-fns';
+import { useState, useEffect, useRef, useId, KeyboardEvent } from 'react';
+import { Calendar, ChevronDown, Check } from 'lucide-react';
+import { format, isToday, isSameDay, parseISO, startOfToday } from 'date-fns';
 
 export type TabType = 'digest' | 'newsletter';
+
+const TABS: { id: TabType; label: string }[] = [
+  { id: 'digest', label: 'Daily Digest' },
+  { id: 'newsletter', label: 'tl;dr sec' },
+];
 
 interface HeaderProps {
   selectedDate: Date | null;
@@ -30,257 +28,239 @@ export default function Header({
   onTabChange,
   onLogoClick
 }: HeaderProps) {
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [currentTime, setCurrentTime] = useState<Date | null>(null);
-
-  // Update time every second - only on client
-  useEffect(() => {
-    setCurrentTime(new Date());
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const handleGoToToday = () => {
-    onDateChange(new Date());
-    setShowDatePicker(false);
-  };
-
-  const isViewingToday = selectedDate ? isToday(selectedDate) : true;
-
   return (
-    <header className="glass-header sticky top-0 z-50">
-      <div className="max-w-[1600px] mx-auto px-6 lg:px-10">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo and Tabs */}
-          <div className="flex items-center gap-6">
-            {/* Logo - Clickable to go home */}
+    <header className="border-b border-line">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10">
+        <div className="flex items-center justify-between gap-4 h-16">
+          <div className="flex items-center gap-8 min-w-0">
             <button
               onClick={onLogoClick}
-              className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer"
+              className="text-left min-w-0"
             >
-              <div className="relative">
-                <div className="w-9 h-9 border border-[var(--accent-primary)] flex items-center justify-center rounded-lg">
-                  <Zap size={18} className="text-[var(--accent-primary)]" strokeWidth={2} />
-                </div>
-              </div>
-              <div className="text-left">
-                <h1 className="font-display text-xl font-bold text-[var(--text-primary)]">
-                  Bmosan Daily News Feed
-                </h1>
-                <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)]" />
-                  <span className="font-display text-xs text-[var(--text-muted)]">
-                    Live Feed
-                  </span>
-                </div>
-              </div>
+              <h1 className="font-serif text-lg sm:text-xl font-semibold tracking-tight text-fg truncate">
+                Bmosan Daily<span className="hidden sm:inline"> News Feed</span>
+              </h1>
             </button>
 
-            {/* Divider */}
-            <div className="hidden md:block w-px h-8 bg-[var(--border-subtle)]" />
-
-            {/* Tab Navigation */}
-            <nav className="hidden md:flex items-center gap-1">
-              <button
-                onClick={() => onTabChange('digest')}
-                className={`
-                  flex items-center gap-2 px-4 py-2 font-display text-sm font-medium
-                  transition-all duration-200 rounded-md
-                  ${currentTab === 'digest'
-                    ? 'bg-[var(--accent-primary)] text-[var(--bg-primary)]'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--accent-primary)] hover:bg-[var(--surface-hover)]'
-                  }
-                `}
-              >
-                <Newspaper size={16} />
-                Daily Digest
-              </button>
-              <button
-                onClick={() => onTabChange('newsletter')}
-                className={`
-                  flex items-center gap-2 px-4 py-2 font-display text-sm font-medium
-                  transition-all duration-200 rounded-md
-                  ${currentTab === 'newsletter'
-                    ? 'bg-[var(--accent-primary)] text-[var(--bg-primary)]'
-                    : 'text-[var(--text-secondary)] hover:text-[var(--accent-primary)] hover:bg-[var(--surface-hover)]'
-                  }
-                `}
-              >
-                <Shield size={16} />
-                tl;dr sec
-              </button>
-            </nav>
+            <Tabs
+              currentTab={currentTab}
+              onTabChange={onTabChange}
+              className="hidden md:flex self-stretch"
+            />
           </div>
 
-          {/* Center - Live Clock & Date Selector (only show date selector on digest tab) */}
-          <div className="hidden md:flex items-center gap-6">
-            {/* Live Clock */}
-            <div className="font-display text-sm text-[var(--text-muted)] min-w-[70px] font-mono">
-              {currentTime ? format(currentTime, 'HH:mm:ss') : '--:--:--'}
-            </div>
-
-            {/* Date Selector - only show on digest tab */}
-            {currentTab === 'digest' && (
-              <>
-                {/* Divider */}
-                <div className="w-px h-5 bg-[var(--border-subtle)]" />
-
-                <div className="relative flex items-center gap-3">
-                  {/* Back to Today Button - shows when viewing archive */}
-                  {!isViewingToday && (
-                    <button
-                      onClick={handleGoToToday}
-                      className="flex items-center gap-2 px-3 py-2 border border-[var(--accent-primary)] text-[var(--accent-primary)] hover:bg-[var(--accent-primary)] hover:text-[var(--bg-primary)] transition-all duration-200 rounded-md group"
-                    >
-                      <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-                      <span className="font-display text-sm font-medium">
-                        Today
-                      </span>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => setShowDatePicker(!showDatePicker)}
-                    className={`
-                      flex items-center gap-3 px-4 py-2 border transition-all rounded-md group
-                      ${!isViewingToday
-                        ? 'border-[var(--accent-primary)] text-[var(--accent-primary)]'
-                        : 'border-[var(--border-subtle)] hover:border-[var(--accent-primary)]'
-                      }
-                    `}
-                  >
-                    <Calendar size={14} className={`transition-colors ${!isViewingToday ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)] group-hover:text-[var(--accent-primary)]'}`} />
-                    <span className={`font-display text-sm font-medium ${!isViewingToday ? 'text-[var(--accent-primary)]' : 'text-[var(--text-primary)]'}`}>
-                      {isViewingToday ? 'Today' : (selectedDate ? format(selectedDate, 'MMM d, yyyy') : '')}
-                    </span>
-                    <ChevronDown
-                      size={14}
-                      className={`transition-transform duration-200 ${showDatePicker ? 'rotate-180' : ''} ${!isViewingToday ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'}`}
-                    />
-                  </button>
-
-                  {/* Date Dropdown */}
-                  {showDatePicker && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowDatePicker(false)}
-                  />
-                  <div className="absolute top-full mt-2 right-0 w-72 bg-[var(--bg-secondary)] border border-[var(--border-subtle)] shadow-2xl z-50 animate-fade-in rounded-lg overflow-hidden">
-                    {/* Today Option */}
-                    <button
-                      onClick={handleGoToToday}
-                      className={`
-                        w-full text-left px-4 py-3 text-sm transition-all
-                        flex items-center justify-between border-b border-[var(--border-subtle)]
-                        ${isViewingToday
-                          ? 'bg-[var(--accent-glow)] text-[var(--accent-primary)]'
-                          : 'hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)]'
-                        }
-                      `}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--accent-primary)] opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--accent-primary)]"></span>
-                        </span>
-                        <span className="font-medium">Today</span>
-                      </div>
-                      <span className="text-xs text-[var(--text-muted)]">
-                        {format(new Date(), 'MMM d')}
-                      </span>
-                    </button>
-
-                    <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
-                      <span className="font-display text-xs text-[var(--text-muted)]">
-                        Archive Dates
-                      </span>
-                    </div>
-                    <div className="max-h-64 overflow-y-auto">
-                      {availableDates.length > 0 ? (
-                        availableDates.map((dateStr, index) => {
-                          const date = new Date(dateStr);
-                          const isSelected = selectedDate && format(date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
-                          const dateIsToday = isToday(date);
-
-                          // Skip today in archive list since it's shown above
-                          if (dateIsToday) return null;
-
-                          return (
-                            <button
-                              key={dateStr}
-                              onClick={() => {
-                                onDateChange(date);
-                                setShowDatePicker(false);
-                              }}
-                              className={`
-                                w-full text-left px-4 py-3 text-sm transition-all
-                                flex items-center justify-between
-                                ${isSelected
-                                  ? 'bg-[var(--accent-glow)] text-[var(--accent-primary)] border-l-2 border-[var(--accent-primary)]'
-                                  : 'hover:bg-[var(--surface-hover)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] border-l-2 border-transparent'
-                                }
-                              `}
-                              style={{ animationDelay: `${index * 30}ms` }}
-                            >
-                              <span className="font-medium">
-                                {format(date, 'EEEE, MMM d')}
-                              </span>
-                              <span className="text-xs text-[var(--text-muted)]">
-                                {format(date, 'yyyy')}
-                              </span>
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <p className="text-center text-[var(--text-muted)] py-6 text-sm">
-                          No archives available
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-                </div>
-              </>
-            )}
-          </div>
-
+          {currentTab === 'digest' && (
+            <DatePicker
+              selectedDate={selectedDate}
+              availableDates={availableDates}
+              onDateChange={onDateChange}
+            />
+          )}
         </div>
 
-        {/* Mobile Tab Navigation */}
-        <div className="md:hidden flex items-center justify-center gap-2 py-3 border-t border-[var(--border-subtle)]">
-          <button
-            onClick={() => onTabChange('digest')}
-            className={`
-              flex items-center gap-2 px-4 py-2 font-display text-sm font-medium
-              transition-all duration-200 rounded-md flex-1 justify-center
-              ${currentTab === 'digest'
-                ? 'bg-[var(--accent-primary)] text-[var(--bg-primary)]'
-                : 'text-[var(--text-secondary)] bg-[var(--bg-secondary)]'
-              }
-            `}
-          >
-            <Newspaper size={16} />
-            Digest
-          </button>
-          <button
-            onClick={() => onTabChange('newsletter')}
-            className={`
-              flex items-center gap-2 px-4 py-2 font-display text-sm font-medium
-              transition-all duration-200 rounded-md flex-1 justify-center
-              ${currentTab === 'newsletter'
-                ? 'bg-[var(--accent-primary)] text-[var(--bg-primary)]'
-                : 'text-[var(--text-secondary)] bg-[var(--bg-secondary)]'
-              }
-            `}
-          >
-            <Shield size={16} />
-            tl;dr sec
-          </button>
-        </div>
+        {/* Mobile tabs */}
+        <Tabs
+          currentTab={currentTab}
+          onTabChange={onTabChange}
+          className="md:hidden flex -mb-px h-11"
+        />
       </div>
-
     </header>
+  );
+}
+
+function Tabs({
+  currentTab,
+  onTabChange,
+  className = '',
+}: {
+  currentTab: TabType;
+  onTabChange: (tab: TabType) => void;
+  className?: string;
+}) {
+  const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    e.preventDefault();
+    const index = TABS.findIndex(t => t.id === currentTab);
+    const delta = e.key === 'ArrowRight' ? 1 : -1;
+    const next = TABS[(index + delta + TABS.length) % TABS.length];
+    onTabChange(next.id);
+    const buttons = e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    buttons[TABS.indexOf(next)]?.focus();
+  };
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Views"
+      className={`items-stretch gap-6 ${className}`}
+      onKeyDown={handleKeyDown}
+    >
+      {TABS.map(tab => {
+        const isActive = currentTab === tab.id;
+        return (
+          <button
+            key={tab.id}
+            role="tab"
+            aria-selected={isActive}
+            aria-controls="main-panel"
+            tabIndex={isActive ? 0 : -1}
+            onClick={() => onTabChange(tab.id)}
+            className={`
+              relative flex items-center text-sm font-medium transition-colors duration-150
+              ${isActive ? 'text-fg' : 'text-fg-subtle hover:text-fg'}
+            `}
+          >
+            {tab.label}
+            {isActive && (
+              <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent" aria-hidden />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DatePicker({
+  selectedDate,
+  availableDates,
+  onDateChange,
+}: {
+  selectedDate: Date | null;
+  availableDates: string[];
+  onDateChange: (date: Date) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+
+  const isViewingToday = selectedDate ? isToday(selectedDate) : true;
+  // Dates arrive as yyyy-MM-dd; parseISO reads them in local time
+  const archiveDates = availableDates.map(d => parseISO(d)).filter(d => !isToday(d));
+
+  const close = (returnFocus = true) => {
+    setOpen(false);
+    if (returnFocus) triggerRef.current?.focus();
+  };
+
+  const choose = (date: Date) => {
+    onDateChange(date);
+    close();
+  };
+
+  // Move focus into the panel when it opens
+  useEffect(() => {
+    if (!open) return;
+    const panel = panelRef.current;
+    const current = panel?.querySelector<HTMLButtonElement>('[aria-current="date"]');
+    (current ?? panel?.querySelector<HTMLButtonElement>('button'))?.focus();
+  }, [open]);
+
+  const handlePanelKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close();
+      return;
+    }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const items = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('button'));
+    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+    const delta = e.key === 'ArrowDown' ? 1 : -1;
+    items[(index + delta + items.length) % items.length]?.focus();
+  };
+
+  const optionClass = (selected: boolean) => `
+    w-full flex items-center justify-between gap-3 px-3 py-2 text-sm text-left rounded-md
+    transition-colors duration-150
+    ${selected ? 'bg-surface-raised text-fg' : 'text-fg-muted hover:bg-surface-raised hover:text-fg'}
+  `;
+
+  return (
+    <div className="relative flex items-center gap-2 flex-shrink-0">
+      {!isViewingToday && (
+        <button
+          onClick={() => onDateChange(startOfToday())}
+          className="hidden sm:inline-flex h-9 items-center px-3 text-sm font-medium text-fg-muted hover:text-fg transition-colors duration-150"
+        >
+          Back to today
+        </button>
+      )}
+
+      <button
+        ref={triggerRef}
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        aria-label={`Choose digest date, currently ${selectedDate ? format(selectedDate, 'MMMM d, yyyy') : 'today'}`}
+        className="h-9 flex items-center gap-2 px-3 rounded-md border border-line hover:border-line-strong text-sm font-medium text-fg transition-colors duration-150"
+      >
+        <Calendar size={14} className="text-fg-subtle" aria-hidden />
+        <span className="tabular-nums">
+          {isViewingToday || !selectedDate ? 'Today' : format(selectedDate, 'MMM d')}
+          {!isViewingToday && selectedDate && (
+            <span className="hidden sm:inline">{format(selectedDate, ', yyyy')}</span>
+          )}
+        </span>
+        <ChevronDown
+          size={14}
+          aria-hidden
+          className={`text-fg-subtle transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => close(false)} aria-hidden />
+          <div
+            ref={panelRef}
+            id={panelId}
+            onKeyDown={handlePanelKeyDown}
+            className="absolute top-full right-0 mt-2 z-50 w-64 max-w-[calc(100vw-2rem)] p-1.5 bg-surface border border-line rounded-lg shadow-2xl shadow-black/40 animate-fade-in"
+          >
+            <button
+              onClick={() => choose(startOfToday())}
+              aria-current={isViewingToday ? 'date' : undefined}
+              className={optionClass(isViewingToday)}
+            >
+              <span className="font-medium">Today</span>
+              {isViewingToday ? (
+                <Check size={14} className="text-accent" aria-hidden />
+              ) : (
+                <span className="text-xs text-fg-subtle tabular-nums">{format(new Date(), 'MMM d')}</span>
+              )}
+            </button>
+
+            <p className="px-3 pt-3 pb-1 text-xs text-fg-subtle">Earlier digests</p>
+            <div className="max-h-64 overflow-y-auto">
+              {archiveDates.length > 0 ? (
+                archiveDates.map(date => {
+                  const isSelected = !!selectedDate && isSameDay(date, selectedDate);
+                  return (
+                    <button
+                      key={date.toISOString()}
+                      onClick={() => choose(date)}
+                      aria-current={isSelected ? 'date' : undefined}
+                      className={optionClass(isSelected)}
+                    >
+                      <span>{format(date, 'EEEE, MMM d')}</span>
+                      {isSelected ? (
+                        <Check size={14} className="text-accent" aria-hidden />
+                      ) : (
+                        <span className="text-xs text-fg-subtle tabular-nums">{format(date, 'yyyy')}</span>
+                      )}
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="px-3 py-4 text-sm text-fg-subtle">No earlier digests yet</p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }

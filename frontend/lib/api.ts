@@ -171,35 +171,3 @@ export async function triggerNewsletterFetch(): Promise<{
 export async function getSources(): Promise<Source[]> {
   return fetchApi<Source[]>('/api/sources');
 }
-
-// Utility functions - Updated color palette
-export function getCategoryColor(category: string): string {
-  const colors: { [key: string]: string } = {
-    cyber: '#3EE98A',  // Primary green
-    ai: '#4FD1C5',     // Cyan (AI/Cloud)
-    cloud: '#4FD1C5',  // Cyan (AI/Cloud)
-    crypto: '#F2B84B', // Amber
-  };
-  return colors[category] || '#3EE98A';
-}
-
-export function getCategoryLabel(category: string): string {
-  const labels: { [key: string]: string } = {
-    cyber: 'Cyber Security',
-    ai: 'Artificial Intelligence',
-    cloud: 'Cloud Engineering',
-    crypto: 'Cryptocurrency',
-  };
-  return labels[category] || category;
-}
-
-export function getSentimentEmoji(sentiment: string | null): string {
-  switch (sentiment) {
-    case 'positive':
-      return '📈';
-    case 'negative':
-      return '📉';
-    default:
-      return '📊';
-  }
-}

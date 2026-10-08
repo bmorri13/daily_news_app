@@ -2,21 +2,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import ReactMarkdown from 'react-markdown';
-import {
-  Shield,
-  ExternalLink,
-  Sparkles,
-  AlertCircle,
-  FileText,
-  AlertTriangle,
-  Lightbulb,
-  Wrench,
-  TrendingUp,
-  CheckCircle2
-} from 'lucide-react';
+import { ArrowUpRight, AlertTriangle, ChevronDown } from 'lucide-react';
 import { getLatestNewsletter, Newsletter } from '@/lib/api';
 import { sanitizeHtml } from '@/lib/sanitizeHtml';
+import { NewsletterSkeleton } from './LoadingSkeleton';
 
 // Parse executive summary into structured sections
 function parseExecutiveSummary(summary: string): {
@@ -72,7 +61,7 @@ function FormatItem({ text }: { text: string }) {
     <>
       {parts.map((part, i) => {
         if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={i} className="text-[var(--text-primary)] font-semibold">{part.slice(2, -2)}</strong>;
+          return <strong key={i} className="text-fg font-semibold">{part.slice(2, -2)}</strong>;
         }
         return <span key={i}>{part}</span>;
       })}
@@ -82,44 +71,40 @@ function FormatItem({ text }: { text: string }) {
 
 // Summary section component
 function SummarySection({
-  icon: Icon,
   title,
   items,
-  accentColor = 'var(--accent-primary)'
+  icon: Icon,
+  iconColor,
 }: {
-  icon: React.ElementType;
   title: string;
   items: string[];
-  accentColor?: string;
+  icon?: React.ElementType;
+  iconColor?: string;
 }) {
   if (!items || items.length === 0) return null;
 
   return (
-    <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <Icon size={18} style={{ color: accentColor }} />
-        <h4 className="font-display text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wide">
-          {title}
-        </h4>
-      </div>
+    <section className="pt-5 border-t border-line">
+      <h4 className="flex items-center gap-2 text-base font-semibold text-fg mb-4">
+        {Icon && <Icon size={16} style={{ color: iconColor }} aria-hidden />}
+        {title}
+      </h4>
       <ul className="space-y-3">
         {items.map((item, index) => (
-          <li key={index} className="flex gap-3 text-sm text-[var(--text-secondary)] leading-relaxed">
-            <span className="text-[var(--text-muted)] mt-1.5 flex-shrink-0">
-              <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accentColor }} />
-            </span>
+          <li key={index} className="flex gap-3 text-sm text-fg-muted leading-relaxed">
+            <span className="mt-[0.6rem] w-1 h-1 rounded-full bg-[var(--fg-subtle)] flex-shrink-0" aria-hidden />
             <span><FormatItem text={item} /></span>
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
 export default function TldrNewsletter() {
   const [newsletter, setNewsletter] = useState<Newsletter | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
 
   // Newsletter HTML comes from an external site, so treat it as untrusted.
@@ -128,22 +113,19 @@ export default function TldrNewsletter() {
     [newsletter?.content]
   );
 
-  const fetchNewsletter = async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const data = await getLatestNewsletter();
-      setNewsletter(data);
-    } catch (err) {
-      console.error('Failed to fetch newsletter:', err);
-      setError('No newsletter available yet. Trigger a fetch to load the latest tl;dr sec newsletter.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const fetchNewsletter = async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        setNewsletter(await getLatestNewsletter());
+      } catch (err) {
+        console.error('Failed to fetch newsletter:', err);
+        setError(true);
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchNewsletter();
   }, []);
 
@@ -153,8 +135,13 @@ export default function TldrNewsletter() {
 
   if (error || !newsletter) {
     return (
-      <div className="pt-8">
-        <EmptyNewsletterState message={error || 'No newsletter available'} />
+      <div className="py-24 max-w-md">
+        <h2 className="font-serif text-2xl font-medium tracking-tight text-fg mb-3">
+          No newsletter yet
+        </h2>
+        <p className="text-fg-muted">
+          The latest tl;dr sec issue will show up here after the next daily sync.
+        </p>
       </div>
     );
   }
@@ -164,182 +151,130 @@ export default function TldrNewsletter() {
     : null;
 
   return (
-    <div className="pt-6 animate-fade-in">
+    <div className="max-w-5xl">
       {/* Header */}
-      <div className="mb-10">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-1 h-12 bg-[var(--accent-primary)] rounded-full" />
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/30 flex items-center justify-center">
-              <Shield size={24} className="text-[var(--accent-primary)]" />
-            </div>
-            <div>
-              <p className="font-display text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1">
-                Security Newsletter
-              </p>
-              <h2 className="font-display text-3xl md:text-4xl font-bold text-[var(--text-primary)]">
-                tl;dr sec
-              </h2>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-4 ml-5 mt-4">
+      <header className="pt-10 pb-12">
+        <p className="text-sm text-fg-subtle mb-2">Security newsletter</p>
+        <h2 className="font-serif text-3xl md:text-4xl font-medium tracking-tight text-fg">
+          tl;dr sec
+        </h2>
+        <p className="mt-3 text-lg text-fg-muted max-w-[60ch] text-balance">{newsletter.title}</p>
+        <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-fg-subtle">
           {newsletter.published_at && (
-            <span className="font-display text-base text-[var(--text-secondary)]">
+            <time dateTime={newsletter.published_at}>
               {format(new Date(newsletter.published_at), 'EEEE, MMMM d, yyyy')}
-            </span>
+            </time>
           )}
-          <div className="hidden sm:block h-px flex-1 bg-[var(--border-subtle)]" />
+          {newsletter.published_at && <span aria-hidden>·</span>}
           <a
             href={newsletter.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 bg-[var(--accent-primary)]/10 border border-[var(--accent-primary)]/30 rounded-lg text-[var(--accent-primary)] hover:bg-[var(--accent-primary)]/20 transition-colors font-display text-sm font-medium"
+            className="inline-flex items-center gap-1 font-medium text-fg-muted underline decoration-[var(--border-strong)] underline-offset-4 hover:text-fg hover:decoration-[var(--fg-subtle)] transition-colors duration-150"
           >
-            View Original
-            <ExternalLink size={14} />
+            Read the original
+            <ArrowUpRight size={14} aria-hidden />
           </a>
-        </div>
-      </div>
+        </p>
+      </header>
 
-      {/* Executive Summary */}
+      {/* Summary */}
       {summaryData && (
-        <div className="mb-10">
-          <div className="flex items-center gap-3 mb-6">
-            <Sparkles size={20} className="text-[var(--accent-primary)]" />
-            <h3 className="font-display text-xl font-bold text-[var(--text-primary)]">
-              Executive Summary
+        <section aria-labelledby="newsletter-summary" className="mb-14">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-6">
+            <h3 id="newsletter-summary" className="font-serif text-2xl font-medium tracking-tight text-fg">
+              Summary
             </h3>
-            <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-tertiary)] px-2.5 py-1 rounded-full font-medium">
-              AI Generated
-            </span>
+            <span className="text-xs text-fg-subtle">Written by AI from this issue</span>
           </div>
 
-          {/* Summary Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {summaryData.intro && (
+            <p className="text-base text-fg-muted max-w-[65ch] mb-10">
+              <FormatItem text={summaryData.intro} />
+            </p>
+          )}
+
+          <div className="grid gap-x-12 gap-y-10 md:grid-cols-2">
             <SummarySection
-              icon={Lightbulb}
-              title="Key Themes"
-              items={summaryData.keyThemes || []}
-              accentColor="#4FD1C5"
-            />
-            <SummarySection
-              icon={AlertTriangle}
-              title="Critical Alerts"
+              title="Critical alerts"
               items={summaryData.criticalAlerts || []}
-              accentColor="#F45D5D"
+              icon={AlertTriangle}
+              iconColor="var(--negative)"
             />
-            <SummarySection
-              icon={Wrench}
-              title="Tools & Resources"
-              items={summaryData.tools || []}
-              accentColor="#1F6F4A"
-            />
-            <SummarySection
-              icon={TrendingUp}
-              title="Industry Trends"
-              items={summaryData.trends || []}
-              accentColor="#F2B84B"
-            />
+            <SummarySection title="Key themes" items={summaryData.keyThemes || []} />
+            <SummarySection title="Industry trends" items={summaryData.trends || []} />
+            <SummarySection title="Tools & resources" items={summaryData.tools || []} />
           </div>
 
-          {/* Actionable Takeaways - Full Width */}
           {summaryData.takeaways && summaryData.takeaways.length > 0 && (
-            <div className="mt-4 bg-[var(--bg-secondary)] border border-[var(--accent-primary)]/30 rounded-lg p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <CheckCircle2 size={18} className="text-[var(--accent-primary)]" />
-                <h4 className="font-display text-sm font-semibold text-[var(--text-primary)] uppercase tracking-wide">
-                  Actionable Takeaways
-                </h4>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <section className="mt-10 pt-5 border-t border-line">
+              <h4 className="text-base font-semibold text-fg mb-4">What to act on</h4>
+              <ol className="grid gap-x-12 gap-y-3 md:grid-cols-2">
                 {summaryData.takeaways.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-3 text-sm text-[var(--text-secondary)] leading-relaxed bg-[var(--bg-card)] rounded-md p-3"
-                  >
-                    <span className="text-[var(--accent-primary)] font-bold flex-shrink-0">
-                      {index + 1}.
+                  <li key={index} className="flex gap-3 text-sm text-fg-muted leading-relaxed">
+                    <span className="w-4 flex-shrink-0 text-right font-medium text-fg-subtle tabular-nums">
+                      {index + 1}
                     </span>
                     <span><FormatItem text={item} /></span>
-                  </div>
+                  </li>
                 ))}
-              </div>
-            </div>
+              </ol>
+            </section>
           )}
-        </div>
+        </section>
       )}
 
-      {/* Newsletter Title */}
-      <div className="mb-6">
-        <h3 className="font-display text-lg font-semibold text-[var(--text-primary)]">
-          {newsletter.title}
-        </h3>
-      </div>
-
-      {/* Full Newsletter Content */}
+      {/* Full issue */}
       {newsletter.content && (
-        <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg overflow-hidden">
+        <section className="rounded-xl border border-line">
           <button
             onClick={() => setShowFullContent(!showFullContent)}
-            className="w-full flex items-center justify-between gap-2 p-4 border-b border-[var(--border-subtle)] hover:bg-[var(--bg-tertiary)] transition-colors"
+            aria-expanded={showFullContent}
+            aria-controls="newsletter-full"
+            className="w-full flex items-center justify-between gap-2 px-5 py-4 text-left text-sm font-medium text-fg-muted hover:text-fg transition-colors duration-150"
           >
-            <div className="flex items-center gap-2">
-              <FileText size={16} className="text-[var(--text-muted)]" />
-              <span className="font-display text-sm font-medium text-[var(--text-secondary)]">
-                Full Newsletter Content
-              </span>
-            </div>
-            <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-tertiary)] px-2 py-1 rounded">
-              {showFullContent ? 'Click to collapse' : 'Click to expand'}
-            </span>
+            {showFullContent ? 'Hide the full issue' : 'Read the full issue here'}
+            <ChevronDown
+              size={16}
+              aria-hidden
+              className={`text-fg-subtle transition-transform duration-200 ${showFullContent ? 'rotate-180' : ''}`}
+            />
           </button>
 
           {showFullContent && (
-            <div className="p-6">
+            <div id="newsletter-full" className="px-5 sm:px-8 pb-8 pt-2 border-t border-line">
               <div
-                className="newsletter-content prose prose-invert prose-sm max-w-none overflow-x-auto"
+                className="newsletter-content max-w-[70ch] overflow-x-auto"
                 dangerouslySetInnerHTML={{ __html: safeContent }}
               />
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* Newsletter Styles - Force dark theme on embedded content */}
+      {/* Embedded newsletter styles - force the app theme on external markup */}
       <style jsx global>{`
+        .newsletter-content,
+        .newsletter-content * {
+          background-color: transparent !important;
+          background: transparent !important;
+          color: var(--fg-muted) !important;
+          font-family: inherit !important;
+        }
+
         .newsletter-content {
-          color: var(--text-secondary) !important;
           line-height: 1.7;
         }
 
-        /* Force dark background on all elements */
-        .newsletter-content,
-        .newsletter-content *,
-        .newsletter-content div,
-        .newsletter-content section,
-        .newsletter-content article,
-        .newsletter-content main,
-        .newsletter-content header,
-        .newsletter-content footer,
-        .newsletter-content nav,
-        .newsletter-content aside,
-        .newsletter-content span,
-        .newsletter-content body {
-          background-color: transparent !important;
-          background: transparent !important;
-          color: var(--text-secondary) !important;
-        }
-
         .newsletter-content a {
-          color: var(--accent-primary) !important;
+          color: var(--fg) !important;
           text-decoration: underline;
-          text-underline-offset: 2px;
+          text-decoration-color: var(--border-strong);
+          text-underline-offset: 3px;
         }
 
         .newsletter-content a:hover {
-          opacity: 0.8;
+          text-decoration-color: var(--fg-subtle);
         }
 
         .newsletter-content h1,
@@ -348,30 +283,31 @@ export default function TldrNewsletter() {
         .newsletter-content h4,
         .newsletter-content h5,
         .newsletter-content h6 {
-          color: var(--text-primary) !important;
-          font-family: var(--font-display);
+          color: var(--fg) !important;
+          font-family: var(--font-serif), Georgia, serif !important;
+          font-weight: 500;
+          line-height: 1.3;
           margin-top: 1.5em;
           margin-bottom: 0.5em;
         }
 
         .newsletter-content h1 {
-          font-size: 1.5rem;
+          font-size: 1.5625rem;
         }
 
         .newsletter-content h2 {
           font-size: 1.25rem;
           padding-top: 1em;
-          border-top: 1px solid var(--border-subtle);
+          border-top: 1px solid var(--border);
           margin-top: 2em;
         }
 
         .newsletter-content h3 {
-          font-size: 1.1rem;
+          font-size: 1.125rem;
         }
 
         .newsletter-content p {
           margin-bottom: 1em;
-          color: var(--text-secondary) !important;
         }
 
         .newsletter-content ul,
@@ -380,14 +316,21 @@ export default function TldrNewsletter() {
           margin-bottom: 1em;
         }
 
+        .newsletter-content ul {
+          list-style: disc;
+        }
+
+        .newsletter-content ol {
+          list-style: decimal;
+        }
+
         .newsletter-content li {
           margin-bottom: 0.5em;
-          color: var(--text-secondary) !important;
         }
 
         .newsletter-content strong,
         .newsletter-content b {
-          color: var(--text-primary) !important;
+          color: var(--fg) !important;
           font-weight: 600;
         }
 
@@ -399,23 +342,22 @@ export default function TldrNewsletter() {
         }
 
         .newsletter-content blockquote {
-          border-left: 3px solid var(--accent-primary);
+          border-left: 2px solid var(--border-strong);
           padding-left: 1em;
           margin-left: 0;
-          color: var(--text-muted) !important;
           font-style: italic;
         }
 
         .newsletter-content code {
-          background: var(--bg-tertiary) !important;
-          padding: 0.2em 0.4em;
+          background: var(--surface-raised) !important;
+          padding: 0.15em 0.4em;
           border-radius: 4px;
           font-size: 0.9em;
-          color: var(--accent-primary) !important;
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace !important;
         }
 
         .newsletter-content pre {
-          background: var(--bg-tertiary) !important;
+          background: var(--surface-raised) !important;
           padding: 1em;
           border-radius: 8px;
           overflow-x: auto;
@@ -428,7 +370,7 @@ export default function TldrNewsletter() {
 
         .newsletter-content hr {
           border: none !important;
-          border-top: 1px solid var(--border-subtle) !important;
+          border-top: 1px solid var(--border) !important;
           margin: 2em 0;
         }
 
@@ -440,15 +382,14 @@ export default function TldrNewsletter() {
 
         .newsletter-content th,
         .newsletter-content td {
-          border: 1px solid var(--border-subtle) !important;
+          border: 1px solid var(--border) !important;
           padding: 0.5em;
           text-align: left;
-          background: transparent !important;
         }
 
         .newsletter-content th {
-          background: var(--bg-tertiary) !important;
-          color: var(--text-primary) !important;
+          background: var(--surface-raised) !important;
+          color: var(--fg) !important;
         }
 
         /* Hide social sharing buttons and navigation from embedded content */
@@ -459,86 +400,16 @@ export default function TldrNewsletter() {
           display: none !important;
         }
 
-        /* Style embedded sponsor sections */
+        /* Embedded sponsor sections */
         .newsletter-content [class*="sponsor"],
         .newsletter-content [class*="Sponsor"] {
-          background: var(--bg-tertiary) !important;
-          border: 1px solid var(--border-subtle) !important;
+          background: var(--surface) !important;
+          border: 1px solid var(--border) !important;
           border-radius: 8px;
           padding: 1em;
           margin: 1.5em 0;
         }
       `}</style>
-    </div>
-  );
-}
-
-function NewsletterSkeleton() {
-  return (
-    <div className="pt-6 animate-pulse">
-      {/* Header Skeleton */}
-      <div className="mb-10">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-1 h-12 bg-[var(--bg-tertiary)] rounded-full" />
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-[var(--bg-tertiary)] rounded-xl" />
-            <div>
-              <div className="w-28 h-3 bg-[var(--bg-tertiary)] rounded mb-2" />
-              <div className="w-36 h-8 bg-[var(--bg-tertiary)] rounded" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Summary Grid Skeleton */}
-      <div className="mb-10">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-5 h-5 bg-[var(--bg-tertiary)] rounded" />
-          <div className="w-40 h-6 bg-[var(--bg-tertiary)] rounded" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-5 h-5 bg-[var(--bg-tertiary)] rounded" />
-                <div className="w-24 h-4 bg-[var(--bg-tertiary)] rounded" />
-              </div>
-              <div className="space-y-3">
-                <div className="w-full h-4 bg-[var(--bg-tertiary)] rounded" />
-                <div className="w-5/6 h-4 bg-[var(--bg-tertiary)] rounded" />
-                <div className="w-4/5 h-4 bg-[var(--bg-tertiary)] rounded" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Content Skeleton */}
-      <div className="bg-[var(--bg-secondary)] border border-[var(--border-subtle)] rounded-lg p-4">
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 bg-[var(--bg-tertiary)] rounded" />
-          <div className="w-36 h-4 bg-[var(--bg-tertiary)] rounded" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EmptyNewsletterState({ message }: { message: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 px-4">
-      <div className="w-16 h-16 border border-[var(--border-subtle)] rounded-xl flex items-center justify-center mb-6">
-        <AlertCircle size={32} className="text-[var(--text-muted)]" />
-      </div>
-      <h3 className="font-display text-lg font-semibold text-[var(--text-primary)] mb-2">
-        No Newsletter Available
-      </h3>
-      <p className="text-[var(--text-muted)] text-center max-w-md mb-6">
-        {message}
-      </p>
-      <p className="text-[var(--text-muted)] text-sm text-center">
-        The newsletter will be fetched automatically during the daily sync, or you can trigger a manual fetch from the backend.
-      </p>
     </div>
   );
 }

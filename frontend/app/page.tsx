@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { format } from 'date-fns';
-import { Shield, Brain, Cloud, Bitcoin } from 'lucide-react';
+import { format, isToday } from 'date-fns';
 import Header, { TabType } from '@/components/Header';
 import CategorySection from '@/components/CategorySection';
 import StatsPanel from '@/components/StatsPanel';
@@ -18,16 +17,12 @@ import {
   Stats,
   Article
 } from '@/lib/api';
+import { CATEGORY_ORDER, getCategory } from '@/lib/categories';
 
-// Category order for display
-const CATEGORY_ORDER = ['cyber', 'ai', 'cloud', 'crypto'];
-
-const categoryConfig: { [key: string]: { label: string; color: string; icon: React.ReactNode } } = {
-  cyber: { label: 'Security', color: '#3EE98A', icon: <Shield size={16} /> },
-  ai: { label: 'AI', color: '#4FD1C5', icon: <Brain size={16} /> },
-  cloud: { label: 'Cloud', color: '#4FD1C5', icon: <Cloud size={16} /> },
-  crypto: { label: 'Crypto', color: '#F2B84B', icon: <Bitcoin size={16} /> },
-};
+function scrollToTop() {
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+}
 
 export default function Home() {
   const [currentTab, setCurrentTab] = useState<TabType>('digest');
@@ -75,7 +70,7 @@ export default function Home() {
       setDigest(digestData);
     } catch (err) {
       console.error('Failed to fetch digest:', err);
-      setError('Failed to load news digest. Make sure the backend is running.');
+      setError("We couldn't load the digest. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -110,184 +105,132 @@ export default function Home() {
   };
 
   const handleFilterClick = (category: string | null) => {
-    if (activeFilter === category) {
-      setActiveFilter(null); // Toggle off
-    } else {
-      setActiveFilter(category);
-    }
-    // Always scroll to top when clicking filter
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Clicking the active filter toggles back to all
+    setActiveFilter(activeFilter === category ? null : category);
+    scrollToTop();
   };
 
   const handleLogoClick = () => {
     // Reset to home state: digest tab, all articles, scroll to top
     setCurrentTab('digest');
     setActiveFilter(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
-  const hasArticles = digest && digest.total_articles > 0;
+  const hasArticles = !!digest && digest.total_articles > 0;
+  const showFilters = currentTab === 'digest' && hasArticles && !loading;
 
   // Filter categories based on active filter
   const displayedCategories = activeFilter
     ? CATEGORY_ORDER.filter(cat => cat === activeFilter)
     : CATEGORY_ORDER;
 
+  const filterOptions = [
+    { key: null, label: 'All', color: null, count: digest?.total_articles || 0 },
+    ...CATEGORY_ORDER.map(category => {
+      const meta = getCategory(category);
+      return {
+        key: category,
+        label: meta.shortLabel,
+        color: meta.color,
+        count: digest?.categories[category]?.length || 0,
+      };
+    }),
+  ];
+
   return (
-    <div className="min-h-screen relative bg-[var(--bg-primary)]">
+    <div className="min-h-screen bg-canvas">
+      {/* Header and filters share one sticky container so they never overlap */}
+      <div className="sticky top-0 z-50 bg-[color-mix(in_oklch,var(--bg)_92%,transparent)] backdrop-blur-md">
+        <Header
+          selectedDate={selectedDate}
+          availableDates={availableDates}
+          onDateChange={handleDateChange}
+          currentTab={currentTab}
+          onTabChange={setCurrentTab}
+          onLogoClick={handleLogoClick}
+        />
 
-      <Header
-        selectedDate={selectedDate}
-        availableDates={availableDates}
-        onDateChange={handleDateChange}
-        currentTab={currentTab}
-        onTabChange={setCurrentTab}
-        onLogoClick={handleLogoClick}
-      />
-
-      {/* Category Filter Bar - only show on digest tab */}
-      {currentTab === 'digest' && hasArticles && !loading && (
-        <div className="sticky top-16 z-40 bg-[var(--bg-primary)]/95 backdrop-blur-sm border-b border-[var(--border-subtle)]">
-          <div className="max-w-[1600px] mx-auto px-6 lg:px-10">
-            <div className="flex items-center gap-3 py-4 overflow-x-auto scrollbar-hide">
-              {/* All button */}
-              <button
-                onClick={() => handleFilterClick(null)}
-                className={`
-                  flex items-center gap-2 px-4 py-2 font-display text-sm font-medium
-                  transition-all duration-200 whitespace-nowrap border rounded-md
-                  ${activeFilter === null
-                    ? 'bg-[var(--accent-primary)] text-[var(--bg-primary)] border-[var(--accent-primary)]'
-                    : 'bg-transparent text-[var(--text-secondary)] border-[var(--border-subtle)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)]'
-                  }
-                `}
-              >
-                All
-                <span className={`
-                  ml-1 px-1.5 py-0.5 text-xs rounded
-                  ${activeFilter === null
-                    ? 'bg-[var(--bg-primary)]/20 text-[var(--bg-primary)]'
-                    : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
-                  }
-                `}>
-                  {digest?.total_articles || 0}
-                </span>
-              </button>
-
-              {/* Divider */}
-              <div className="w-px h-6 bg-[var(--border-subtle)]" />
-
-              {/* Category buttons */}
-              {CATEGORY_ORDER.map((category) => {
-                const config = categoryConfig[category];
-                const count = digest?.categories[category]?.length || 0;
-                const isActive = activeFilter === category;
-
+        {showFilters && (
+          <div className="border-b border-line">
+            <div
+              role="group"
+              aria-label="Filter by category"
+              className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 flex items-center gap-2 py-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {filterOptions.map(option => {
+                const isActive = activeFilter === option.key;
                 return (
                   <button
-                    key={category}
-                    onClick={() => handleFilterClick(category)}
+                    key={option.key ?? 'all'}
+                    onClick={() => handleFilterClick(option.key)}
+                    aria-pressed={isActive}
                     className={`
-                      flex items-center gap-2 px-4 py-2 font-display text-sm font-medium
-                      transition-all duration-200 whitespace-nowrap border rounded-md
+                      flex items-center gap-2 h-9 px-3.5 rounded-full border text-sm font-medium whitespace-nowrap
+                      transition-colors duration-150
                       ${isActive
-                        ? 'border-current'
-                        : 'bg-transparent border-[var(--border-subtle)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)]'
+                        ? 'bg-surface-raised border-line-strong text-fg'
+                        : 'border-line text-fg-muted hover:text-fg hover:border-line-strong'
                       }
                     `}
-                    style={{
-                      color: isActive ? config.color : 'var(--text-secondary)',
-                      backgroundColor: isActive ? `${config.color}15` : 'transparent',
-                      borderColor: isActive ? config.color : undefined,
-                    }}
                   >
-                    <span style={{ color: isActive ? config.color : 'var(--text-muted)' }}>
-                      {config.icon}
-                    </span>
-                    <span className="hidden sm:inline">{config.label}</span>
-                    <span className="sm:hidden">{category === 'ai' ? 'AI' : config.label.split(' ')[0]}</span>
-                    <span
-                      className="ml-1 px-1.5 py-0.5 text-xs rounded"
-                      style={{
-                        backgroundColor: isActive ? `${config.color}20` : 'var(--bg-tertiary)',
-                        color: isActive ? config.color : 'var(--text-muted)',
-                      }}
-                    >
-                      {count}
-                    </span>
+                    {option.color && (
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: option.color }} aria-hidden />
+                    )}
+                    {option.label}
+                    <span className="text-fg-subtle tabular-nums">{option.count}</span>
                   </button>
                 );
               })}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <main className="max-w-[1600px] mx-auto px-6 lg:px-10 pb-16 relative">
-        <div className="flex flex-col lg:flex-row gap-10">
-          {/* Main Content */}
-          <div className="flex-1 min-w-0">
+      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 pb-20">
+        <div className="flex flex-col lg:flex-row gap-12 xl:gap-16">
+          {/* Main content */}
+          <div id="main-panel" role="tabpanel" className="flex-1 min-w-0">
             {currentTab === 'digest' ? (
               <>
                 {error && (
-                  <div className="bg-[var(--bg-secondary)] border border-red-500/50 p-5 mb-8 animate-fade-in rounded-lg">
-                    <p className="text-red-400 font-display text-sm font-medium mb-1">
-                      Connection Error
-                    </p>
-                    <p className="text-sm text-[var(--text-secondary)]">
-                      {error}
-                    </p>
+                  <div role="alert" className="mt-10 p-5 rounded-xl border border-line">
+                    <p className="font-medium text-fg mb-1">Something went wrong</p>
+                    <p className="text-sm text-fg-muted mb-4">{error}</p>
+                    <button
+                      onClick={() => fetchData(selectedDate)}
+                      className="h-9 px-4 rounded-md border border-line-strong text-sm font-medium text-fg hover:bg-surface-raised transition-colors duration-150"
+                    >
+                      Try again
+                    </button>
                   </div>
                 )}
 
                 {loading ? (
                   <DigestSkeleton />
                 ) : hasArticles ? (
-                  <div>
-                    {/* Hero Date Header */}
-                    <div className="mb-10 pt-6 animate-slide-in-left">
-                      <div className="flex items-center gap-4 mb-3">
-                        <div className="w-1 h-10 bg-[var(--accent-primary)] rounded-full" />
-                        <div>
-                          <p className="font-display text-xs text-[var(--text-muted)] mb-1">
-                            Daily Digest
-                          </p>
-                          <h2 className="font-display text-3xl md:text-4xl font-bold text-[var(--text-primary)]">
-                            {selectedDate ? format(selectedDate, 'EEEE') : ''}
-                          </h2>
-                        </div>
-                      </div>
+                  <>
+                    {/* Dateline */}
+                    <header className="pt-10 pb-12">
+                      <p className="text-sm text-fg-subtle mb-1">
+                        {selectedDate && isToday(selectedDate) ? "Today's digest" : 'Daily digest'}
+                      </p>
+                      <h2 className="font-serif text-3xl md:text-4xl font-medium tracking-tight text-fg">
+                        {selectedDate ? format(selectedDate, 'EEEE, MMMM d') : ''}
+                      </h2>
+                    </header>
 
-                      <div className="flex items-center gap-4 ml-5">
-                        <span className="font-display text-base text-[var(--text-secondary)]">
-                          {selectedDate ? format(selectedDate, 'MMMM d, yyyy') : ''}
-                        </span>
-                        <div className="h-px flex-1 bg-[var(--border-subtle)]" />
-                        <span className="font-display text-sm text-[var(--text-muted)]">
-                          {activeFilter
-                            ? `${digest?.categories[activeFilter]?.length || 0} articles`
-                            : `${digest?.total_articles} articles`
-                          }
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Categories */}
-                    {displayedCategories.map((category, index) => {
-                      const articles = (digest?.categories[category] || []).slice(0, 5);
-                      return (
-                        <CategorySection
-                          key={category}
-                          category={category}
-                          articles={articles}
-                          sectionIndex={index}
-                          onArticleClick={handleArticleClick}
-                        />
-                      );
-                    })}
-                  </div>
+                    {displayedCategories.map(category => (
+                      <CategorySection
+                        key={category}
+                        category={category}
+                        articles={(digest?.categories[category] || []).slice(0, 5)}
+                        onArticleClick={handleArticleClick}
+                      />
+                    ))}
+                  </>
                 ) : (
-                  <EmptyState />
+                  !error && <EmptyState />
                 )}
               </>
             ) : (
@@ -295,10 +238,10 @@ export default function Home() {
             )}
           </div>
 
-          {/* Sidebar - only show on digest tab */}
+          {/* Sidebar - only on the digest tab */}
           {currentTab === 'digest' && (
-            <aside className="lg:w-72 flex-shrink-0">
-              <div className="sticky top-36">
+            <aside className="lg:w-72 flex-shrink-0 lg:pt-10">
+              <div className="lg:sticky lg:top-36">
                 {statsLoading ? (
                   <StatsPanelSkeleton />
                 ) : (
@@ -310,7 +253,6 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Article Modal */}
       <ArticleModal
         article={selectedArticle}
         isOpen={isModalOpen}
