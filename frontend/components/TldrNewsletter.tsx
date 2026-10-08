@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
 import { ArrowUpRight, AlertTriangle, ChevronDown } from 'lucide-react';
 import { getLatestNewsletter, Newsletter } from '@/lib/api';
+import { sanitizeHtml } from '@/lib/sanitizeHtml';
 import { NewsletterSkeleton } from './LoadingSkeleton';
 
 // Parse executive summary into structured sections
@@ -105,6 +106,12 @@ export default function TldrNewsletter() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
+
+  // Newsletter HTML comes from an external site, so treat it as untrusted.
+  const safeContent = useMemo(
+    () => (newsletter?.content ? sanitizeHtml(newsletter.content) : ''),
+    [newsletter?.content]
+  );
 
   useEffect(() => {
     const fetchNewsletter = async () => {
@@ -238,7 +245,7 @@ export default function TldrNewsletter() {
             <div id="newsletter-full" className="px-5 sm:px-8 pb-8 pt-2 border-t border-line">
               <div
                 className="newsletter-content max-w-[70ch] overflow-x-auto"
-                dangerouslySetInnerHTML={{ __html: newsletter.content }}
+                dangerouslySetInnerHTML={{ __html: safeContent }}
               />
             </div>
           )}
