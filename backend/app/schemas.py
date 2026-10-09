@@ -1,6 +1,11 @@
-from pydantic import BaseModel, HttpUrl
+import html
+from pydantic import AfterValidator, BaseModel, HttpUrl
 from datetime import datetime, date
-from typing import Optional
+from typing import Annotated, Optional
+
+# Some feeds double-encode titles, leaving entities like "&#8217;" after
+# parsing. Decoding on output also fixes titles already stored that way.
+DecodedStr = Annotated[str, AfterValidator(html.unescape)]
 
 
 # Source Schemas
@@ -27,7 +32,7 @@ class Source(SourceBase):
 
 # Article Schemas
 class ArticleBase(BaseModel):
-    title: str
+    title: DecodedStr
     url: str
     category: str
 
@@ -42,7 +47,7 @@ class ArticleCreate(ArticleBase):
 class ArticleSummary(BaseModel):
     """Lightweight article for list views."""
     id: int
-    title: str
+    title: DecodedStr
     url: str
     category: str
     summary: Optional[str] = None
@@ -127,7 +132,7 @@ class FetchTriggerResponse(BaseModel):
 
 # Newsletter Schemas
 class NewsletterBase(BaseModel):
-    title: str
+    title: DecodedStr
     url: str
 
 

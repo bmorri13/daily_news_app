@@ -1,3 +1,4 @@
+import html
 import feedparser
 import httpx
 import nh3
@@ -172,7 +173,7 @@ class NewsletterFetcher:
 
         # Create newsletter record
         newsletter = Newsletter(
-            title=latest_entry.get('title', 'tl;dr sec Newsletter'),
+            title=html.unescape(latest_entry.get('title', 'tl;dr sec Newsletter')).strip(),
             url=url,
             content=content,
             published_at=self.parse_published_date(latest_entry),

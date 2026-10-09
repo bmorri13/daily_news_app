@@ -1,3 +1,4 @@
+import html
 import feedparser
 import httpx
 from datetime import datetime, timezone
@@ -128,7 +129,7 @@ class RSSFetcher:
             
             article_data = {
                 'source_id': source.id,
-                'title': entry.get('title', 'Untitled'),
+                'title': html.unescape(entry.get('title', 'Untitled')).strip(),
                 'url': url,
                 'author': entry.get('author', entry.get('dc_creator')),
                 'content': self.extract_content(entry),
