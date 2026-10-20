@@ -73,7 +73,7 @@ A daily news aggregation platform that uses AI (Claude) to fetch, analyze, summa
 
 ### First Run
 
-On first start, click the "Refresh" button in the UI to trigger an initial fetch. This will:
+On first start, trigger an initial fetch by hand (see [Manual triggers](#manual-triggers)) or wait for the 12:00 UTC schedule. A fetch will:
 1. Fetch articles from all configured RSS feeds
 2. Process them with Claude AI for summaries and tags
 3. Select the top 5 articles per category for today's digest
@@ -134,10 +134,10 @@ daily_news_app/
 | `/api/categories/{category}` | GET | Get articles by category |
 | `/api/sources` | GET | List RSS sources |
 | `/api/stats` | GET | Get aggregation statistics |
-| `/api/fetch/trigger` | POST | Manually trigger fetch |
+| `/api/fetch/trigger` | POST | Manually trigger fetch (needs `X-Admin-Token`; 404 when `ADMIN_TOKEN` is unset) |
 | `/api/fetch/logs` | GET | Get fetch operation logs |
 | `/api/newsletter/latest` | GET | Get latest tl;dr sec newsletter |
-| `/api/newsletter/trigger` | POST | Fetch and process newsletter |
+| `/api/newsletter/trigger` | POST | Fetch and process newsletter (needs `X-Admin-Token`; 404 when `ADMIN_TOKEN` is unset) |
 
 ## 📡 Configured RSS Sources
 
@@ -187,11 +187,19 @@ The application uses PostgreSQL's pg_cron extension for automated scheduling:
 - **RSS Feed Fetch**: Runs daily at 12:00 UTC
 - **Newsletter Fetch**: Runs daily at 12:05 UTC
 
-Scheduler configuration is defined in `supabase/init/02_scheduler.sql`. The pg_cron jobs use the pg_net extension to make HTTP POST requests to the backend API endpoints.
+The schedule runs inside the backend (APScheduler in `backend/app/main.py`), which calls the jobs directly. Only one run of each job happens at a time. `supabase/init/02_scheduler.sql` is a leftover pg_cron schedule for the local dev database; it POSTs to the trigger endpoints and gets a 404 unless `ADMIN_TOKEN` is set.
 
-To manually trigger fetches:
-- Use the "Refresh" button in the UI
-- Or call the API: `curl -X POST http://localhost:8000/api/fetch/trigger`
+#### Manual triggers
+
+Each run spends Claude API credits, so the trigger endpoints are locked down:
+- The public site's `/api/*` proxy only forwards `GET`/`HEAD`, so a `POST` from the internet never reaches the backend.
+- The backend only serves the triggers when `ADMIN_TOKEN` is set, and then requires it in an `X-Admin-Token` header. It's unset in production by default.
+
+To run one by hand on the host, add `ADMIN_TOKEN=<random value>` to `/opt/bmosan-news/.env` and recreate the backend (`docker compose -f docker-compose.prod.yml up -d backend`). The deploy workflow rewrites `.env`, so the token lasts until the next deploy. Then:
+
+```bash
+curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" http://127.0.0.1:8000/api/fetch/trigger
+```
 
 ### Adding New RSS Sources
 

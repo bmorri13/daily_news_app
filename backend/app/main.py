@@ -1,13 +1,15 @@
+import asyncio
+import hmac
+import threading
 from datetime import datetime, date, timezone, timedelta
 from typing import Optional
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import FastAPI, Depends, Header, HTTPException, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc, text
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-import httpx
 
 from app.database import get_db, init_db
 from app.models import Article, Source, FetchLog, Newsletter
@@ -22,32 +24,64 @@ settings = get_settings()
 scheduler = AsyncIOScheduler()
 
 
+# One run of each job at a time, whether started by the scheduler or by hand.
+# Each run makes Claude API calls, so overlapping runs only duplicate spend.
+_fetch_lock = threading.Lock()
+_newsletter_lock = threading.Lock()
+
+
+def create_fetch_log(db: Session) -> int:
+    """Record a new fetch run and return its log ID."""
+    fetch_log = FetchLog(status="running")
+    db.add(fetch_log)
+    db.commit()
+    db.refresh(fetch_log)
+    return fetch_log.id
+
+
 async def scheduled_fetch():
-    """Trigger the fetch pipeline on schedule."""
-    print("APScheduler: Triggering scheduled fetch...")
+    """Run the fetch pipeline on schedule.
+
+    Calls the job directly rather than POSTing to this API, so the trigger
+    endpoints don't need to be reachable without a token.
+    """
+    print("APScheduler: Starting scheduled fetch...")
+    from app.database import SessionLocal
+
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post("http://localhost:8000/api/fetch/trigger", timeout=30.0)
-            if resp.status_code == 200:
-                print(f"APScheduler: Fetch trigger succeeded ({resp.status_code})")
-            else:
-                print(f"APScheduler: Fetch trigger returned unexpected status {resp.status_code}: {resp.text}")
+        db = SessionLocal()
+        try:
+            log_id = create_fetch_log(db)
+        finally:
+            db.close()
+        await asyncio.to_thread(run_fetch_job, log_id)
     except Exception as e:
-        print(f"APScheduler: Fetch trigger failed: {e}")
+        print(f"APScheduler: Scheduled fetch failed: {e}")
 
 
 async def scheduled_newsletter():
-    """Trigger newsletter fetch on schedule."""
-    print("APScheduler: Triggering scheduled newsletter fetch...")
+    """Run the newsletter job on schedule."""
+    print("APScheduler: Starting scheduled newsletter fetch...")
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post("http://localhost:8000/api/newsletter/trigger", timeout=30.0)
-            if resp.status_code == 200:
-                print(f"APScheduler: Newsletter trigger succeeded ({resp.status_code})")
-            else:
-                print(f"APScheduler: Newsletter trigger returned unexpected status {resp.status_code}: {resp.text}")
+        await asyncio.to_thread(run_newsletter_job)
     except Exception as e:
-        print(f"APScheduler: Newsletter trigger failed: {e}")
+        print(f"APScheduler: Scheduled newsletter fetch failed: {e}")
+
+
+def require_admin_token(x_admin_token: Optional[str] = Header(default=None)):
+    """Gate the manual trigger endpoints.
+
+    The frontend proxies /api/* from the public site, so these must not be
+    open: each call starts Claude API work. With ADMIN_TOKEN unset the
+    endpoints don't exist (404); otherwise the X-Admin-Token header must match.
+    """
+    expected = settings.admin_token
+    if not expected:
+        raise HTTPException(status_code=404, detail="Not Found")
+    if not x_admin_token or not hmac.compare_digest(
+        x_admin_token.encode(), expected.encode()
+    ):
+        raise HTTPException(status_code=401, detail="Invalid or missing admin token")
 
 
 @asynccontextmanager
@@ -296,24 +330,27 @@ async def get_sources(
 
 
 # Manual Fetch Trigger
-@app.post("/api/fetch/trigger", response_model=schemas.FetchTriggerResponse)
+@app.post(
+    "/api/fetch/trigger",
+    response_model=schemas.FetchTriggerResponse,
+    dependencies=[Depends(require_admin_token)],
+)
 async def trigger_fetch(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """Manually trigger a fetch operation."""
-    # Create fetch log
-    fetch_log = FetchLog(status="running")
-    db.add(fetch_log)
-    db.commit()
-    db.refresh(fetch_log)
-    
+    """Manually trigger a fetch operation (requires X-Admin-Token)."""
+    if _fetch_lock.locked():
+        raise HTTPException(status_code=409, detail="A fetch is already running")
+
+    log_id = create_fetch_log(db)
+
     # Run fetch in background
-    background_tasks.add_task(run_fetch_job, fetch_log.id)
-    
+    background_tasks.add_task(run_fetch_job, log_id)
+
     return {
         "message": "Fetch job started",
-        "log_id": fetch_log.id,
+        "log_id": log_id,
         "status": "running"
     }
 
@@ -323,6 +360,19 @@ def run_fetch_job(log_id: int):
     from app.database import SessionLocal
 
     db = SessionLocal()
+
+    if not _fetch_lock.acquire(blocking=False):
+        try:
+            fetch_log = db.query(FetchLog).filter(FetchLog.id == log_id).first()
+            if fetch_log:
+                fetch_log.status = "failed"
+                fetch_log.errors = ["Skipped: another fetch was already running"]
+                fetch_log.completed_at = datetime.now(timezone.utc)
+                db.commit()
+        finally:
+            db.close()
+        print(f"Fetch job {log_id} skipped: another fetch is running")
+        return
 
     try:
         fetch_log = db.query(FetchLog).filter(FetchLog.id == log_id).first()
@@ -361,6 +411,7 @@ def run_fetch_job(log_id: int):
 
     finally:
         db.close()
+        _fetch_lock.release()
 
 
 # Fetch Logs
@@ -444,12 +495,19 @@ async def get_latest_newsletter(db: Session = Depends(get_db)):
     return newsletter
 
 
-@app.post("/api/newsletter/trigger", response_model=schemas.NewsletterTriggerResponse)
+@app.post(
+    "/api/newsletter/trigger",
+    response_model=schemas.NewsletterTriggerResponse,
+    dependencies=[Depends(require_admin_token)],
+)
 async def trigger_newsletter_fetch(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """Manually trigger newsletter fetch and processing."""
+    """Manually trigger newsletter fetch and processing (requires X-Admin-Token)."""
+    if _newsletter_lock.locked():
+        raise HTTPException(status_code=409, detail="A newsletter fetch is already running")
+
     background_tasks.add_task(run_newsletter_job)
 
     return {
@@ -462,6 +520,10 @@ async def trigger_newsletter_fetch(
 def run_newsletter_job():
     """Background task to fetch and process newsletter."""
     from app.database import SessionLocal
+
+    if not _newsletter_lock.acquire(blocking=False):
+        print("Newsletter job skipped: another newsletter fetch is running")
+        return
 
     db = SessionLocal()
 
@@ -485,3 +547,4 @@ def run_newsletter_job():
 
     finally:
         db.close()
+        _newsletter_lock.release()
