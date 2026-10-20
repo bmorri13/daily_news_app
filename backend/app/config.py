@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     
     # Anthropic API
     anthropic_api_key: str = ""
+
+    # Token for the manual POST /api/*/trigger endpoints (X-Admin-Token header).
+    # Unset disables them; the daily schedule runs the jobs directly.
+    admin_token: str = ""
     
     # Fetching settings
     articles_per_category: int = 5

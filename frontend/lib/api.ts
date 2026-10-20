@@ -140,14 +140,6 @@ export async function getStats(): Promise<Stats> {
   return fetchApi<Stats>('/api/stats');
 }
 
-export async function triggerFetch(): Promise<{
-  message: string;
-  log_id: number;
-  status: string;
-}> {
-  return fetchApi('/api/fetch/trigger', { method: 'POST' });
-}
-
 export async function getFetchLogs(limit = 10): Promise<FetchLog[]> {
   return fetchApi<FetchLog[]>(`/api/fetch/logs?limit=${limit}`);
 }
@@ -158,14 +150,6 @@ export async function getFetchLog(id: number): Promise<FetchLog> {
 
 export async function getLatestNewsletter(): Promise<Newsletter> {
   return fetchApi<Newsletter>('/api/newsletter/latest');
-}
-
-export async function triggerNewsletterFetch(): Promise<{
-  message: string;
-  newsletter_id: number | null;
-  status: string;
-}> {
-  return fetchApi('/api/newsletter/trigger', { method: 'POST' });
 }
 
 export async function getSources(): Promise<Source[]> {
