@@ -32,6 +32,6 @@
     "sharp": "^0.35.3",
     "postcss": "$postcss",
     "minimatch": "^10.2.5",
-    "brace-expansion": "^5.0.8"
+    "brace-expansion": "^5.0.12"
   }
 }
