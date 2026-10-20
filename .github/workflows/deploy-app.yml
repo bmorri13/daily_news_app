@@ -57,12 +57,13 @@ jobs:
           chmod 600 \${APP_DIR}/.env
 
           cd \${APP_DIR}
-          # Stop any existing containers (both dev and prod compose files)
-          docker compose down --remove-orphans 2>/dev/null || true
-          docker compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
-
-          # Start with production compose
+          # No docker compose down here. On docker-compose-03 the k3s network
+          # policy controller can wipe the Docker FORWARD rules for a freshly
+          # created bridge, cutting the containers off from the internet (the
+          # tunnel then serves 530s). up replaces changed containers in place
+          # and keeps the existing network; --remove-orphans drops services
+          # that no longer exist, including any old dev-compose containers.
           docker compose -f docker-compose.prod.yml pull
-          docker compose -f docker-compose.prod.yml up -d --build
+          docker compose -f docker-compose.prod.yml up -d --build --remove-orphans
           echo 'Deployment complete'
         "
