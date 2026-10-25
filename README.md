@@ -201,6 +201,20 @@ To run one by hand on the host, add `ADMIN_TOKEN=<random value>` to `/opt/bmosan
 curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" http://127.0.0.1:8000/api/fetch/trigger
 ```
 
+### Logging
+
+The backend writes one JSON object per line to stdout (`backend/app/logging_config.py`). The homelab collector on the host ships container logs to Splunk through Cribl. Each line carries an `event` name to search and route on:
+
+| `event` | When | Splunk index |
+|---------|------|--------------|
+| `llm_call` | Every Claude API call: `operation`, `model`, `input_tokens`, `output_tokens`, `latency_ms`, `stop_reason`, `status` (`ok`/`error`) | `ai_agents` |
+| `trigger_invoked`, `trigger_denied` | Every call to a trigger endpoint, with `client_ip` and `reason` (never the token) | `security` |
+| `http_request` | Every API request except successful health checks: `method`, `path`, `status`, `duration_ms`, `client_ip` (from `CF-Connecting-IP`), `request_id` (Cloudflare ray ID) | `apps` |
+| `job_started`, `job_completed`, `job_failed`, `job_skipped` | Scheduled and manual runs, with article counts and token totals | `apps` |
+| `feed_fetched`, `feed_fetch_failed`, `article_*`, `newsletter_*` | Per-feed results and processing problems | `apps` |
+
+Set `LOG_LEVEL=DEBUG` for more detail. Never log secrets, `DATABASE_URL`, or prompt and article text.
+
 ### Adding New RSS Sources
 
 Edit `backend/app/config.py` and add sources to the `RSS_SOURCES` dictionary:

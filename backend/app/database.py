@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.config import get_settings
@@ -35,4 +37,4 @@ def init_db():
     """Initialize database tables."""
     from app import models  # Import models to register them
     Base.metadata.create_all(bind=engine)
-    print("Database tables created successfully!")
+    logging.getLogger(__name__).info("Database tables ready")
