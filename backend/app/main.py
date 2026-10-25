@@ -1,10 +1,13 @@
 import asyncio
 import hmac
+import logging
 import threading
+import time
+import uuid
 from datetime import datetime, date, timezone, timedelta
 from typing import Optional
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends, Header, HTTPException, Query, BackgroundTasks
+from fastapi import FastAPI, Depends, Header, HTTPException, Query, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc, text
@@ -18,6 +21,10 @@ from app.rss_fetcher import RSSFetcher
 from app.ai_processor import AIProcessor
 from app.newsletter_fetcher import NewsletterFetcher
 from app.config import get_settings
+from app.logging_config import configure_logging, log_event
+
+configure_logging()
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -45,7 +52,6 @@ async def scheduled_fetch():
     Calls the job directly rather than POSTing to this API, so the trigger
     endpoints don't need to be reachable without a token.
     """
-    print("APScheduler: Starting scheduled fetch...")
     from app.database import SessionLocal
 
     try:
@@ -54,34 +60,64 @@ async def scheduled_fetch():
             log_id = create_fetch_log(db)
         finally:
             db.close()
-        await asyncio.to_thread(run_fetch_job, log_id)
+        await asyncio.to_thread(run_fetch_job, log_id, "schedule")
     except Exception as e:
-        print(f"APScheduler: Scheduled fetch failed: {e}")
+        log_event(logger, "job_failed", f"Scheduled fetch failed: {type(e).__name__}",
+                  level=logging.ERROR, job="fetch", trigger="schedule",
+                  error_type=type(e).__name__, error=str(e)[:500])
 
 
 async def scheduled_newsletter():
     """Run the newsletter job on schedule."""
-    print("APScheduler: Starting scheduled newsletter fetch...")
     try:
-        await asyncio.to_thread(run_newsletter_job)
+        await asyncio.to_thread(run_newsletter_job, "schedule")
     except Exception as e:
-        print(f"APScheduler: Scheduled newsletter fetch failed: {e}")
+        log_event(logger, "job_failed", f"Scheduled newsletter job failed: {type(e).__name__}",
+                  level=logging.ERROR, job="newsletter", trigger="schedule",
+                  error_type=type(e).__name__, error=str(e)[:500])
 
 
-def require_admin_token(x_admin_token: Optional[str] = Header(default=None)):
+def client_ip(request: Request) -> Optional[str]:
+    """The visitor's IP address.
+
+    Requests reach the backend through Cloudflare -> cloudflared -> the Next.js
+    frontend, so the socket peer is the frontend container. Cloudflare sets
+    CF-Connecting-IP (and overwrites any value a client sends); the backend port
+    is bound to loopback, so nothing else can reach it to forge the header.
+    """
+    ip = request.headers.get("cf-connecting-ip")
+    if ip:
+        return ip.strip()
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
+def require_admin_token(request: Request, x_admin_token: Optional[str] = Header(default=None)):
     """Gate the manual trigger endpoints.
 
     The frontend proxies /api/* from the public site, so these must not be
     open: each call starts Claude API work. With ADMIN_TOKEN unset the
     endpoints don't exist (404); otherwise the X-Admin-Token header must match.
+    Every attempt is logged as trigger_invoked or trigger_denied (routed to
+    Splunk's security index). The token itself is never logged.
     """
+    who = {"path": request.url.path, "client_ip": client_ip(request),
+           "user_agent": (request.headers.get("user-agent") or "")[:256] or None}
     expected = settings.admin_token
     if not expected:
+        log_event(logger, "trigger_denied", "Trigger called while disabled",
+                  level=logging.WARNING, reason="disabled", **who)
         raise HTTPException(status_code=404, detail="Not Found")
     if not x_admin_token or not hmac.compare_digest(
         x_admin_token.encode(), expected.encode()
     ):
+        log_event(logger, "trigger_denied", "Trigger called with a bad admin token",
+                  level=logging.WARNING,
+                  reason="invalid_token" if x_admin_token else "missing_token", **who)
         raise HTTPException(status_code=401, detail="Invalid or missing admin token")
+    log_event(logger, "trigger_invoked", "Manual trigger accepted", **who)
 
 
 @asynccontextmanager
@@ -89,15 +125,14 @@ async def lifespan(app):
     """Manage startup and shutdown events."""
     # Startup
     init_db()
-    print("Database initialized.")
     scheduler.add_job(scheduled_fetch, CronTrigger(hour=12, minute=0), id="daily_fetch", misfire_grace_time=3600)
     scheduler.add_job(scheduled_newsletter, CronTrigger(hour=12, minute=5), id="daily_newsletter", misfire_grace_time=3600)
     scheduler.start()
-    print("APScheduler started: fetch at 12:00 UTC, newsletter at 12:05 UTC")
+    logger.info("Scheduler started: fetch at 12:00 UTC, newsletter at 12:05 UTC")
     yield
     # Shutdown
     scheduler.shutdown()
-    print("APScheduler shut down.")
+    logger.info("Scheduler shut down")
 
 
 app = FastAPI(
@@ -121,6 +156,35 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log one http_request event per request, with the visitor's real IP.
+
+    Successful health checks (the compose healthcheck, every 30 s) are skipped.
+    """
+    # Cloudflare's ray ID ties this line to Cloudflare's own logs.
+    request_id = request.headers.get("cf-ray") or uuid.uuid4().hex[:16]
+    start = time.perf_counter()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        path = request.url.path
+        if not (path == "/health" and status < 400):
+            log_event(
+                logger, "http_request", f"{request.method} {path} {status}",
+                level=logging.ERROR if status >= 500 else logging.INFO,
+                method=request.method, path=path, query=request.url.query or None,
+                status=status, duration_ms=round((time.perf_counter() - start) * 1000, 1),
+                client_ip=client_ip(request), country=request.headers.get("cf-ipcountry"),
+                user_agent=(request.headers.get("user-agent") or "")[:256] or None,
+                request_id=request_id,
+            )
+
+
 # Health Check
 @app.get("/health", response_model=schemas.HealthCheck)
 async def health_check(db: Session = Depends(get_db)):
@@ -130,7 +194,8 @@ async def health_check(db: Session = Depends(get_db)):
         db.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
-        print(f"Health check database error: {e}")
+        log_event(logger, "health_check_failed", f"Health check database error: {type(e).__name__}",
+                  level=logging.ERROR, error=str(e)[:300])
         db_status = "disconnected"
 
     return {
@@ -346,7 +411,7 @@ async def trigger_fetch(
     log_id = create_fetch_log(db)
 
     # Run fetch in background
-    background_tasks.add_task(run_fetch_job, log_id)
+    background_tasks.add_task(run_fetch_job, log_id, "manual")
 
     return {
         "message": "Fetch job started",
@@ -355,11 +420,12 @@ async def trigger_fetch(
     }
 
 
-def run_fetch_job(log_id: int):
+def run_fetch_job(log_id: int, trigger: str = "manual"):
     """Background task to run fetch job."""
     from app.database import SessionLocal
 
     db = SessionLocal()
+    job = {"job": "fetch", "trigger": trigger, "log_id": log_id}
 
     if not _fetch_lock.acquire(blocking=False):
         try:
@@ -371,9 +437,13 @@ def run_fetch_job(log_id: int):
                 db.commit()
         finally:
             db.close()
-        print(f"Fetch job {log_id} skipped: another fetch is running")
+        log_event(logger, "job_skipped", "Fetch skipped: another fetch is running",
+                  level=logging.WARNING, **job)
         return
 
+    start = time.perf_counter()
+    processor = None
+    log_event(logger, "job_started", "Fetch job started", **job)
     try:
         fetch_log = db.query(FetchLog).filter(FetchLog.id == log_id).first()
 
@@ -395,19 +465,30 @@ def run_fetch_job(log_id: int):
         fetch_log.status = "completed"
         fetch_log.completed_at = datetime.now(timezone.utc)
         db.commit()
+        log_event(logger, "job_completed", "Fetch job completed",
+                  duration_ms=round((time.perf_counter() - start) * 1000),
+                  articles_fetched=fetch_log.articles_fetched,
+                  articles_processed=processed_count, **processor.stats, **job)
 
     except Exception as e:
-        print(f"Fetch job {log_id} failed: {e}")
+        log_event(logger, "job_failed", f"Fetch job failed: {type(e).__name__}",
+                  level=logging.ERROR, duration_ms=round((time.perf_counter() - start) * 1000),
+                  error_type=type(e).__name__, error=str(e)[:500],
+                  **(processor.stats if processor else {}), **job)
         try:
             db.rollback()
             fetch_log = db.query(FetchLog).filter(FetchLog.id == log_id).first()
             if fetch_log:
                 fetch_log.status = "failed"
-                fetch_log.errors = [str(e)]
+                # /api/fetch/logs is public: record the error class only; the
+                # full message is in the job_failed log event.
+                fetch_log.errors = [f"{type(e).__name__} (details in the backend logs)"]
                 fetch_log.completed_at = datetime.now(timezone.utc)
                 db.commit()
         except Exception as rollback_err:
-            print(f"Fetch job {log_id} failed to update log after error: {rollback_err}")
+            log_event(logger, "job_log_update_failed",
+                      f"Could not mark fetch log failed: {type(rollback_err).__name__}",
+                      level=logging.ERROR, error=str(rollback_err)[:300], **job)
 
     finally:
         db.close()
@@ -508,7 +589,7 @@ async def trigger_newsletter_fetch(
     if _newsletter_lock.locked():
         raise HTTPException(status_code=409, detail="A newsletter fetch is already running")
 
-    background_tasks.add_task(run_newsletter_job)
+    background_tasks.add_task(run_newsletter_job, "manual")
 
     return {
         "message": "Newsletter fetch job started",
@@ -517,29 +598,43 @@ async def trigger_newsletter_fetch(
     }
 
 
-def run_newsletter_job():
+def run_newsletter_job(trigger: str = "manual"):
     """Background task to fetch and process newsletter."""
     from app.database import SessionLocal
 
+    job = {"job": "newsletter", "trigger": trigger}
     if not _newsletter_lock.acquire(blocking=False):
-        print("Newsletter job skipped: another newsletter fetch is running")
+        log_event(logger, "job_skipped", "Newsletter job skipped: another run is in progress",
+                  level=logging.WARNING, **job)
         return
 
     db = SessionLocal()
+    start = time.perf_counter()
+    processor = None
+    log_event(logger, "job_started", "Newsletter job started", **job)
 
     try:
         # Fetch latest newsletter
         fetcher = NewsletterFetcher(db)
         newsletter = fetcher.fetch_latest()
 
+        summarized = False
         if newsletter and not newsletter.processed:
             # Process with AI
             processor = AIProcessor(db)
             processor.process_newsletter(newsletter)
-            print(f"Newsletter processed: {newsletter.title[:50]}...")
+            summarized = True
+
+        log_event(logger, "job_completed", "Newsletter job completed",
+                  duration_ms=round((time.perf_counter() - start) * 1000),
+                  newsletter_id=newsletter.id if newsletter else None, summarized=summarized,
+                  **(processor.stats if processor else {}), **job)
 
     except Exception as e:
-        print(f"Error in newsletter job: {e}")
+        log_event(logger, "job_failed", f"Newsletter job failed: {type(e).__name__}",
+                  level=logging.ERROR, duration_ms=round((time.perf_counter() - start) * 1000),
+                  error_type=type(e).__name__, error=str(e)[:500],
+                  **(processor.stats if processor else {}), **job)
         try:
             db.rollback()
         except Exception:

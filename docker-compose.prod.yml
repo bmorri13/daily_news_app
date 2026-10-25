@@ -17,7 +17,8 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - ADMIN_TOKEN=${ADMIN_TOKEN:-}
       - PYTHONUNBUFFERED=1
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # --no-access-log: the app logs each request itself, as JSON with the visitor IP
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

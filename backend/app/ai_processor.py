@@ -1,5 +1,7 @@
 import json
+import logging
 import re
+import time
 from datetime import datetime, timezone, date, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -9,8 +11,10 @@ from anthropic import Anthropic
 
 from app.models import Article, Newsletter
 from app.config import get_settings
+from app.logging_config import log_event
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 class AIProcessor:
@@ -20,6 +24,48 @@ class AIProcessor:
         self.db = db
         self.client = Anthropic(api_key=settings.anthropic_api_key)
         self.model = "claude-sonnet-4-6"
+        # Per-instance totals; the job logs them when it finishes.
+        self.stats = {"llm_calls": 0, "llm_errors": 0, "input_tokens": 0, "output_tokens": 0}
+
+    def _call_claude(self, operation: str, prompt: str, max_tokens: int, **context):
+        """Call the Messages API and log one `llm_call` event (routed to Splunk ai_agents).
+
+        `context` identifies the item (article_id, newsletter_id); the prompt and
+        response text are never logged.
+        """
+        fields = {"provider": "anthropic", "operation": operation, "model": self.model,
+                  "max_tokens": max_tokens, **context}
+        self.stats["llm_calls"] += 1
+        start = time.perf_counter()
+        try:
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except Exception as e:
+            self.stats["llm_errors"] += 1
+            log_event(logger, "llm_call", f"Claude {operation} call failed: {type(e).__name__}",
+                      level=logging.WARNING, status="error",
+                      latency_ms=round((time.perf_counter() - start) * 1000),
+                      error_type=type(e).__name__, http_status=getattr(e, "status_code", None),
+                      error=str(e)[:500], **fields)
+            raise
+
+        usage = getattr(response, "usage", None)
+        input_tokens = getattr(usage, "input_tokens", 0) or 0
+        output_tokens = getattr(usage, "output_tokens", 0) or 0
+        self.stats["input_tokens"] += input_tokens
+        self.stats["output_tokens"] += output_tokens
+        truncated = response.stop_reason == "max_tokens"
+        log_event(logger, "llm_call",
+                  f"Claude {operation} call hit max_tokens" if truncated else f"Claude {operation} call",
+                  level=logging.WARNING if truncated else logging.INFO, status="ok",
+                  latency_ms=round((time.perf_counter() - start) * 1000),
+                  input_tokens=input_tokens, output_tokens=output_tokens,
+                  stop_reason=response.stop_reason, response_model=response.model,
+                  message_id=response.id, **fields)
+        return response
     
     def process_article(self, article: Article) -> Article:
         """Process a single article with AI summarization and tagging."""
@@ -55,14 +101,9 @@ Respond in JSON format only, no other text:
 }}"""
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=500,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            
+            response = self._call_claude("article_summary", prompt, 500, article_id=article.id)
+
+
             # Parse the response
             response_text = response.content[0].text.strip()
             
@@ -78,6 +119,8 @@ Respond in JSON format only, no other text:
                 article.relevance_score = float(result.get('relevance_score', 0.5))
             else:
                 # Fallback if JSON parsing fails
+                log_event(logger, "article_parse_failed", "Claude response had no JSON object",
+                          level=logging.WARNING, article_id=article.id)
                 article.summary = response_text[:500]
                 article.key_points = []
                 article.ai_tags = []
@@ -88,7 +131,10 @@ Respond in JSON format only, no other text:
             article.processed_at = datetime.now(timezone.utc)
             
         except Exception as e:
-            print(f"Error processing article {article.id}: {e}")
+            # API errors are already logged as llm_call; this also covers bad JSON.
+            log_event(logger, "article_processing_failed", f"Article processing failed: {type(e).__name__}",
+                      level=logging.WARNING, article_id=article.id,
+                      error_type=type(e).__name__, error=str(e)[:500])
             # Set defaults on error
             article.summary = article.title
             article.key_points = []
@@ -109,12 +155,12 @@ Respond in JSON format only, no other text:
         processed_count = 0
 
         for article in articles:
-            print(f"Processing: {article.title[:50]}...")
             self.process_article(article)
             self.db.commit()
             processed_count += 1
 
-        print(f"Processed {processed_count} articles.")
+        log_event(logger, "articles_processed", f"Processed {processed_count} articles",
+                  articles_processed=processed_count)
 
         return processed_count
     
@@ -153,6 +199,8 @@ Respond in JSON format only, no other text:
             selected[category] = articles
 
         self.db.commit()
+        log_event(logger, "articles_featured", "Selected today's featured articles",
+                  featured={c: len(a) for c, a in selected.items()})
 
         return selected
     
@@ -209,19 +257,15 @@ Provide an executive summary with the following structure:
 Format your response as clean, scannable bullet points. Be concise but comprehensive. Focus on information that security professionals would find most valuable."""
 
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=1500,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
+            response = self._call_claude("newsletter_summary", prompt, 1500, newsletter_id=newsletter.id)
 
             newsletter.executive_summary = response.content[0].text.strip()
             newsletter.processed = True
 
         except Exception as e:
-            print(f"Error processing newsletter {newsletter.id}: {e}")
+            log_event(logger, "newsletter_processing_failed", f"Newsletter processing failed: {type(e).__name__}",
+                      level=logging.WARNING, newsletter_id=newsletter.id,
+                      error_type=type(e).__name__, error=str(e)[:500])
             newsletter.executive_summary = "Executive summary generation failed. Please read the full newsletter below."
             newsletter.processed = True
 

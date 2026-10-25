@@ -1,4 +1,5 @@
 import html
+import logging
 import feedparser
 import httpx
 import nh3
@@ -9,6 +10,9 @@ from sqlalchemy.orm import Session
 from bs4 import BeautifulSoup
 
 from app.models import Newsletter
+from app.logging_config import log_event
+
+logger = logging.getLogger(__name__)
 
 
 # The frontend's newsletter styles target class names (share/social/sponsor
@@ -47,16 +51,19 @@ class NewsletterFetcher:
             feed = feedparser.parse(response.text)
 
             if feed.bozo and not feed.entries:
-                print(f"Warning: Feed has parsing issues: {feed.bozo_exception}")
+                log_event(logger, "feed_fetch_failed", "Newsletter feed could not be parsed",
+                          level=logging.WARNING, feed_url=self.FEED_URL, error_type="parse_error",
+                          error=str(feed.bozo_exception)[:300])
                 return None
 
             return feed
 
-        except httpx.HTTPError as e:
-            print(f"HTTP error fetching newsletter feed: {e}")
-            return None
         except Exception as e:
-            print(f"Error fetching newsletter feed: {e}")
+            response = getattr(e, "response", None)
+            log_event(logger, "feed_fetch_failed", f"Newsletter feed fetch failed: {type(e).__name__}",
+                      level=logging.WARNING, feed_url=self.FEED_URL, error_type=type(e).__name__,
+                      http_status=response.status_code if response is not None else None,
+                      error=str(e)[:300])
             return None
 
     def parse_published_date(self, entry: dict) -> Optional[datetime]:
@@ -122,20 +129,17 @@ class NewsletterFetcher:
 
             return content
 
-        except httpx.HTTPError as e:
-            print(f"HTTP error fetching newsletter content: {e}")
-            return None
         except Exception as e:
-            print(f"Error fetching newsletter content: {e}")
+            log_event(logger, "newsletter_content_fetch_failed",
+                      f"Newsletter page fetch failed: {type(e).__name__}", level=logging.WARNING,
+                      url=url, error_type=type(e).__name__, error=str(e)[:300])
             return None
 
     def fetch_latest(self) -> Optional[Newsletter]:
         """Fetch the latest newsletter from the RSS feed."""
-        print("Fetching tl;dr sec newsletter...")
-
         feed = self.fetch_feed()
         if not feed or not feed.entries:
-            print("No newsletter entries found.")
+            logger.warning("No newsletter entries found")
             return None
 
         # Get the latest entry
@@ -143,17 +147,17 @@ class NewsletterFetcher:
         url = latest_entry.get('link', '')
 
         if not url:
-            print("No URL found in latest newsletter entry.")
+            logger.warning("No URL found in latest newsletter entry")
             return None
 
         # Check if we already have this newsletter
         existing = self.db.query(Newsletter).filter(Newsletter.url == url).first()
         if existing:
-            print(f"Newsletter already exists: {existing.title[:50]}...")
+            log_event(logger, "newsletter_unchanged", "Latest newsletter already stored",
+                      newsletter_id=existing.id, newsletter_title=existing.title[:100])
             return existing
 
         # Fetch full content
-        print(f"Fetching full content from: {url}")
         full_content = self.fetch_full_content(url)
 
         # Extract content from RSS entry as fallback
@@ -185,7 +189,8 @@ class NewsletterFetcher:
         self.db.commit()
         self.db.refresh(newsletter)
 
-        print(f"Fetched new newsletter: {newsletter.title[:50]}...")
+        log_event(logger, "newsletter_fetched", "Fetched new newsletter",
+                  newsletter_id=newsletter.id, newsletter_title=newsletter.title[:100])
         return newsletter
 
     def get_latest(self) -> Optional[Newsletter]:

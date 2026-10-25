@@ -1,4 +1,5 @@
 import html
+import logging
 import feedparser
 import httpx
 from datetime import datetime, timezone
@@ -9,8 +10,10 @@ from sqlalchemy import and_
 
 from app.models import Source, Article
 from app.config import RSS_SOURCES, get_settings
+from app.logging_config import log_event
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 class RSSFetcher:
@@ -39,7 +42,7 @@ class RSSFetcher:
                     self.db.add(source)
         
         self.db.commit()
-        print("Sources synchronized with configuration.")
+        logger.debug("Sources synchronized with configuration")
     
     def fetch_feed(self, feed_url: str) -> Optional[feedparser.FeedParserDict]:
         """Fetch and parse a single RSS feed."""
@@ -54,16 +57,18 @@ class RSSFetcher:
             feed = feedparser.parse(response.text)
             
             if feed.bozo and not feed.entries:
-                print(f"Warning: Feed {feed_url} has parsing issues: {feed.bozo_exception}")
+                log_event(logger, "feed_fetch_failed", "Feed could not be parsed", level=logging.WARNING,
+                          feed_url=feed_url, error_type="parse_error", error=str(feed.bozo_exception)[:300])
                 return None
             
             return feed
             
-        except httpx.HTTPError as e:
-            print(f"HTTP error fetching {feed_url}: {e}")
-            return None
         except Exception as e:
-            print(f"Error fetching {feed_url}: {e}")
+            response = getattr(e, "response", None)
+            log_event(logger, "feed_fetch_failed", f"Feed fetch failed: {type(e).__name__}",
+                      level=logging.WARNING, feed_url=feed_url, error_type=type(e).__name__,
+                      http_status=response.status_code if response is not None else None,
+                      error=str(e)[:300])
             return None
     
     def parse_published_date(self, entry: dict) -> Optional[datetime]:
@@ -150,12 +155,12 @@ class RSSFetcher:
         all_articles = []
         
         for source in sources:
-            print(f"Fetching from {source.name} ({source.category})...")
-            
             article_data_list = self.fetch_source_articles(
                 source, 
                 limit=articles_per_source
             )
+            log_event(logger, "feed_fetched", f"Fetched {source.name}", source_name=source.name,
+                      category=source.category, new_articles=len(article_data_list))
             
             for article_data in article_data_list:
                 try:
@@ -163,11 +168,13 @@ class RSSFetcher:
                     self.db.add(article)
                     all_articles.append(article)
                 except Exception as e:
-                    print(f"Error saving article: {e}")
+                    log_event(logger, "article_save_failed", f"Error saving article: {type(e).__name__}",
+                              level=logging.WARNING, source_name=source.name, error=str(e)[:300])
                     continue
         
         self.db.commit()
-        print(f"Fetched {len(all_articles)} new articles total.")
+        log_event(logger, "feeds_fetched", f"Fetched {len(all_articles)} new articles",
+                  sources=len(sources), new_articles=len(all_articles))
         
         return all_articles
     
@@ -182,7 +189,7 @@ class RSSFetcher:
         all_articles = []
         
         for source in sources:
-            print(f"Fetching from {source.name}...")
+            logger.info("Fetching from %s", source.name)
             
             article_data_list = self.fetch_source_articles(
                 source,
@@ -195,7 +202,8 @@ class RSSFetcher:
                     self.db.add(article)
                     all_articles.append(article)
                 except Exception as e:
-                    print(f"Error saving article: {e}")
+                    log_event(logger, "article_save_failed", f"Error saving article: {type(e).__name__}",
+                              level=logging.WARNING, source_name=source.name, error=str(e)[:300])
                     continue
         
         self.db.commit()
