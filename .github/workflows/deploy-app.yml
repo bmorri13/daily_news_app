@@ -29,6 +29,15 @@ jobs:
         CF_TOKEN: ${{ secrets.CF_TOKEN }}
         NEXT_PUBLIC_GA_MEASUREMENT_ID: ${{ secrets.NEXT_PUBLIC_GA_MEASUREMENT_ID }}
       run: |
+        # The .env contents go over ssh's stdin, never in the remote command:
+        # Tailscale SSH logs every command line, and those logs reach Splunk.
+        printf '%s\n' \
+          "DATABASE_URL=${DATABASE_URL}" \
+          "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" \
+          "CF_TOKEN=${CF_TOKEN}" \
+          "NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}" \
+          'ARTICLES_PER_CATEGORY=5' \
+          'FETCH_SCHEDULE_HOURS=24' |
         ssh -o StrictHostKeyChecking=no "${SSH_USER}@docker-compose-03" "
           set -e
           APP_DIR=/opt/bmosan-news
@@ -45,15 +54,9 @@ jobs:
             git reset --hard origin/master
           fi
 
-          # Write .env file AFTER clone/update
-          printf '%s\n' \
-            'DATABASE_URL=${DATABASE_URL}' \
-            'ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}' \
-            'CF_TOKEN=${CF_TOKEN}' \
-            'NEXT_PUBLIC_GA_MEASUREMENT_ID=${NEXT_PUBLIC_GA_MEASUREMENT_ID}' \
-            'ARTICLES_PER_CATEGORY=5' \
-            'FETCH_SCHEDULE_HOURS=24' \
-            > \${APP_DIR}/.env
+          # Write .env file AFTER clone/update, from stdin
+          umask 077
+          cat > \${APP_DIR}/.env
           chmod 600 \${APP_DIR}/.env
 
           cd \${APP_DIR}
