@@ -14,7 +14,7 @@
     "react-dom": "^18",
     "lucide-react": "^0.563.0",
     "date-fns": "^3.3.1",
-    "dompurify": "^3.4.16",
+    "dompurify": "^3.4.17",
     "react-markdown": "^9.0.1"
   },
   "devDependencies": {
